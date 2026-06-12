@@ -42,10 +42,14 @@ class Grid:
             )
 
         else:
-            return None
+            raise ValueError(
+                "Grid requires either (ri_ax, ti_ax, pi_ax) or rau_lim"
+            )
 
         if ringhost:
-            logger.info("Adding 4 cells to the radial inner boundary as ghost cells")
+            # TODO: the inner ghost radius (1.001 * 4 * Rsun) is not tied to
+            # Rstar_Rsun from Config; it is hardcoded here.
+            logger.info("Adding 3 ghost cells to the radial inner boundary")
             self.ri_ax = np.insert(
                 self.ri_ax, 0, np.linspace(1.001 * 4 * nc.Rsun, self.ri_ax[0], 4)[:-1]
             )
@@ -80,7 +84,6 @@ class Grid:
         aspect_ratio=1.0,
         logr=True,
     ):
-        thax_ver = 1
         ismirror = True if abs(theta_lim[1] - np.pi / 2) < 1e-8 else False
 
         if dr_to_r is not None:
@@ -90,27 +93,18 @@ class Grid:
                 ntheta = int(round(ntheta_float))
             else:
                 ntheta = int(round(ntheta_float / 2)) * 2
-            # ntheta = ntheta_upper if ismirror else ntheta_upper
+
+        if nr is None and dr_to_r is None:
+            raise ValueError("Specify either nr or dr_to_r")
+        if ntheta is None and dr_to_r is None:
+            raise ValueError("Specify either ntheta or dr_to_r")
 
         if logr:
             self.ri_ax = np.geomspace(*rau_lim, nr + 1) * nc.au
         else:
             self.ri_ax = np.linspace(*rau_lim, nr + 1) * nc.au
 
-        if thax_ver == 1:
-            self.ti_ax = np.linspace(*theta_lim, ntheta + 1)
-
-        elif thax_ver == 2:
-            dtheta = (theta_lim[1] - theta_lim[0]) / ntheta
-            eps = 0.001
-            ti_ax = np.linspace(theta_lim[0], theta_lim[1] - dtheta * eps, ntheta + 1)
-            self.ti_ax = np.concatenate([ti_ax, [theta_lim[1]]])
-            ntheta += 1
-
-        elif thax_ver == 3:
-            self.ti_ax = compressed_x2(theta_lim[0], theta_lim[1], 0.95, ntheta + 1)
-            self.ti_ax[-1] = theta_lim[1]
-            ti_ax = np.linspace(*theta_lim, ntheta + 1)
+        self.ti_ax = np.linspace(*theta_lim, ntheta + 1)
 
         self.pi_ax = np.linspace(*phi_lim, nphi + 1)
 
@@ -128,59 +122,3 @@ class Grid:
         logger.info(
             f"    φ  = [{pi[0]:.2f}:{pi[-1]:.2f}] deg".ljust(32) + f" Nφ = {len(pi)-1}"
         )
-
-
-def get_interface_coord(
-    rau_lim=None,
-    theta_lim=(0, np.pi / 2),
-    phi_lim=(0, 2 * np.pi),
-    nr=None,
-    ntheta=None,
-    nphi=1,
-    dr_to_r=None,
-    aspect_ratio=1.0,
-    logr=True,
-):
-    if dr_to_r is not None:
-        nr = int(np.log(rau_lim[1] / rau_lim[0]) / dr_to_r)
-        ntheta_float = (theta_lim[1] - theta_lim[0]) / dr_to_r / aspect_ratio
-        ntheta_upper = int(round(ntheta_float))
-        ntheta = ntheta_upper * 2 if theta_lim > np.pi / 2 + 1e-8 else ntheta_upper
-
-    if logr:
-        ri_ax = np.geomspace(*rau_lim, nr + 1) * nc.au
-    else:
-        ri_ax = np.linspace(*rau_lim, nr + 1) * nc.au
-
-    dtheta = (theta_lim[1] - theta_lim[0]) / ntheta
-    eps = 1e-5
-    ti_ax = np.linspace(theta_lim[0], theta_lim[1] - dtheta * eps, ntheta + 1)
-    ti_ax = np.concatenate([ti_ax, [theta_lim[1]]])
-    ntheta += 1
-
-    pi_ax = np.linspace(*phi_lim, nphi + 1)
-
-    return ri_ax, ti_ax, pi_ax
-
-
-def compressed_x2(xmin, xmax, xrat_root, nfaces):
-    x2rat = np.abs(xrat_root)
-    xmid = 0.5 * np.pi
-    x = np.linspace(xmin, xmax, nfaces) / np.pi
-
-    def func(x):
-        if x <= 0.5:
-            ratn = x2rat ** (0.5 * nfaces)
-            rnx = x2rat ** (x * nfaces)
-            lw = (rnx - ratn) / (1.0 - ratn)
-            rw = 1.0 - lw
-            return xmin * lw + xmid * rw
-
-        else:
-            ratn = (1.0 / x2rat) ** (0.5 * nfaces)
-            rnx = (1.0 / x2rat) ** ((x - 0.5) * nfaces)
-            lw = (rnx - ratn) / (1.0 - ratn)
-            rw = 1.0 - lw
-            return xmid * lw + xmax * rw
-
-    return np.vectorize(func)(x)
