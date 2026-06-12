@@ -1175,27 +1175,28 @@ class Cube(BaseObsData):
         if self.Ippv.shape[2] == 1:
             _Ipp = self.Ippv[..., 0]
         else:
-            if (vlim is not None) and (len(vlim) == 2):
-                if vlim[0] < vlim[1]:
-                    cond = np.where(
-                        (vlim[0] < self.vkms) & (self.vkms < vlim[1]), True, False
+            _Ippv = self.Ippv
+            _vkms = self.vkms
+            if vlim is not None:
+                if len(vlim) != 2 or vlim[0] >= vlim[1]:
+                    raise ValueError(
+                        f"vlim must be a 2-element sequence with vlim[0] < vlim[1]; got {vlim}"
                     )
-                    _Ipp = self.Ippv[..., cond]
-                    # _vkms = self.vkms[cond]
-                else:
-                    raise Exception
+                cond = (vlim[0] < _vkms) & (_vkms < vlim[1])
+                _Ippv = _Ippv[..., cond]
+                _vkms = _vkms[cond]
 
             if method == "sum":
-                _Ipp = np.sum(self.Ippv, axis=-1) * (self.vkms[1] - self.vkms[0])
-
+                _Ipp = np.sum(_Ippv, axis=-1) * (_vkms[1] - _vkms[0])
             elif method == "integrate":
-                _Ipp = integrate.simpson(self.Ippv, x=self.vkms, axis=-1)
-
-        if normalize == "peak":
-            _Ipp /= np.max(_Ipp)
+                _Ipp = integrate.simpson(_Ippv, x=_vkms, axis=-1)
+            else:
+                raise ValueError(f"Unknown method: {method!r}")
 
         img = Image(_Ipp, xau=self.xau, yau=self.yau, dpc=self.dpc, Iunit=self.Iunit)
         img.copy_info_from_obsdata(self)
+        if normalize == "peak":
+            img.norm_I("max")
 
         return img
 
