@@ -1,14 +1,17 @@
 """
-Tests for envos/log.py (P1-5).
+Tests for envos/log.py (P2-C: simplified logging).
 
 Covers:
-- unset_logfile: file handlers are properly removed without increasing handler count
-- set_level: stream handler level is correctly changed
-- change_rundir: log file destination moves to new directory
+- setup(): idempotent — calling it N times leaves exactly 1 StreamHandler
+- setup(logfile=...): adds exactly 1 FileHandler; the file is created
+- setup(file_level=...): file handler uses independent level
+- update_logfile(): emits DeprecationWarning and still configures logging
+- StandardFormatter: no 'is this used?' artefact in output
 """
 
 import logging
 import pathlib
+import warnings
 
 import pytest
 
@@ -19,7 +22,7 @@ def _count_file_handlers(lg):
 
 
 def _count_stream_handlers(lg):
-    """Return the number of StreamHandler (but not FileHandler) instances on a logger."""
+    """Return the number of StreamHandler (but not FileHandler) instances."""
     return sum(
         1 for h in lg.handlers
         if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
@@ -27,127 +30,167 @@ def _count_stream_handlers(lg):
 
 
 # ---------------------------------------------------------------------------
-# Handler non-proliferation: calling update_logfile twice must NOT add
-# extra file handlers (B-30 / P1-5 item 1).
+# setup() idempotency: calling it 3 times must not accumulate handlers.
 # ---------------------------------------------------------------------------
 
-def test_update_logfile_no_handler_proliferation(tmp_path):
+def test_setup_idempotent_stream_handler():
     """
-    Calling update_logfile() twice must not accumulate extra file handlers.
-    After both calls, exactly one FileHandler should exist on the 'envos' logger.
-    """
-    import envos.log as log
-
-    logfile = tmp_path / "test.log"
-
-    # Call update_logfile twice with the same file
-    log.update_logfile(name="envos", filepath=logfile)
-    log.update_logfile(name="envos", filepath=logfile)
-
-    lg = log.loggers["envos"]
-    assert _count_file_handlers(lg) == 1, (
-        f"Expected exactly 1 FileHandler after two update_logfile calls, "
-        f"got {_count_file_handlers(lg)}"
-    )
-
-    # Clean up: remove the file handler
-    log.unset_logfile("envos")
-
-
-def test_unset_logfile_removes_all_file_handlers(tmp_path):
-    """
-    unset_logfile removes all FileHandlers without touching StreamHandlers.
+    Calling setup() three times must leave exactly one StreamHandler on the
+    'envos' logger (no handler proliferation).
     """
     import envos.log as log
 
-    logfile = tmp_path / "cleanup_test.log"
-    log.update_logfile(name="envos", filepath=logfile)
+    log.setup(level="INFO")
+    log.setup(level="WARNING")
+    log.setup(level="INFO")
 
-    lg = log.loggers["envos"]
-    stream_count_before = _count_stream_handlers(lg)
-
-    log.unset_logfile("envos")
-
-    assert _count_file_handlers(lg) == 0, "All FileHandlers should be removed"
-    assert _count_stream_handlers(lg) == stream_count_before, (
-        "StreamHandlers should not be affected by unset_logfile"
+    assert _count_stream_handlers(log.logger) == 1, (
+        f"Expected exactly 1 StreamHandler after 3 setup() calls, "
+        f"got {_count_stream_handlers(log.logger)}"
     )
 
 
-# ---------------------------------------------------------------------------
-# set_level: stream handler level is updated correctly (B-30 / P1-5 item 2)
-# ---------------------------------------------------------------------------
-
-def test_set_level_stream_handler(tmp_path):
-    """
-    set_level("envos", "DEBUG", target="stream") sets the stream handler to DEBUG.
-    """
+def test_setup_stream_level():
+    """setup(level='DEBUG') sets the stream handler to DEBUG."""
     import envos.log as log
 
-    lg = log.loggers["envos"]
+    log.setup(level="DEBUG")
 
-    # Save original level so we can restore it
-    original_levels = [h.level for h in lg.handlers if isinstance(h, logging.StreamHandler)
-                       and not isinstance(h, logging.FileHandler)]
-
-    log.set_level("envos", "DEBUG", target="stream")
-
-    for h in lg.handlers:
-        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
-            assert h.level == logging.DEBUG, (
-                f"Stream handler level should be DEBUG, got {h.level}"
-            )
+    stream_handlers = [
+        h for h in log.logger.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+    ]
+    assert stream_handlers, "No StreamHandler found after setup()"
+    for h in stream_handlers:
+        assert h.level == logging.DEBUG
 
     # Restore
-    for h, lv in zip(
-        [h for h in lg.handlers if isinstance(h, logging.StreamHandler)
-         and not isinstance(h, logging.FileHandler)],
-        original_levels,
-    ):
-        h.setLevel(lv)
+    log.setup(level="INFO")
 
 
 # ---------------------------------------------------------------------------
-# change_rundir: log file destination moves (B-29 / P1-5 item 3)
+# setup(logfile=...): file creation and single FileHandler.
 # ---------------------------------------------------------------------------
 
-def test_change_rundir_moves_log_file(tmp_path):
+def test_setup_with_logfile_creates_file(tmp_path):
+    """setup(logfile=...) must create the log file and add exactly 1 FileHandler."""
+    import envos.log as log
+
+    logfile = tmp_path / "envos.log"
+    log.setup(logfile=logfile)
+
+    assert logfile.exists(), "Log file must be created by setup(logfile=...)"
+    assert _count_file_handlers(log.logger) == 1, (
+        f"Expected exactly 1 FileHandler, got {_count_file_handlers(log.logger)}"
+    )
+
+    # Cleanup
+    log.setup(level="INFO")
+
+
+def test_setup_with_logfile_idempotent(tmp_path):
+    """Calling setup(logfile=...) twice leaves exactly 1 FileHandler."""
+    import envos.log as log
+
+    logfile = tmp_path / "envos.log"
+    log.setup(logfile=logfile)
+    log.setup(logfile=logfile)
+
+    assert _count_file_handlers(log.logger) == 1, (
+        f"Expected exactly 1 FileHandler after 2 setup() calls, "
+        f"got {_count_file_handlers(log.logger)}"
+    )
+
+    # Cleanup
+    log.setup(level="INFO")
+
+
+def test_setup_without_logfile_has_no_file_handler():
+    """setup() without logfile must not add any FileHandler."""
+    import envos.log as log
+
+    log.setup(level="INFO")
+
+    assert _count_file_handlers(log.logger) == 0, (
+        f"Expected 0 FileHandlers when logfile=None, "
+        f"got {_count_file_handlers(log.logger)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# setup(file_level=...): independent file handler level.
+# ---------------------------------------------------------------------------
+
+def test_setup_file_level_independent(tmp_path):
     """
-    After change_rundir(), the FileHandler points to the new directory.
+    setup(level='WARNING', logfile=..., file_level='DEBUG') sets stream to WARNING
+    and file handler to DEBUG independently.
     """
     import envos.log as log
 
-    dir_a = tmp_path / "run_A"
-    dir_a.mkdir()
-    dir_b = tmp_path / "run_B"
-    dir_b.mkdir()
+    logfile = tmp_path / "envos.log"
+    log.setup(level="WARNING", logfile=logfile, file_level="DEBUG")
 
-    logfile_a = dir_a / "envos.log"
+    stream_handlers = [
+        h for h in log.logger.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+    ]
+    file_handlers = [h for h in log.logger.handlers if isinstance(h, logging.FileHandler)]
 
-    # Set up a file handler pointing at dir_a
-    log.update_logfile(name="envos", filepath=logfile_a)
-
-    lg = log.loggers["envos"]
-    assert _count_file_handlers(lg) == 1
-
-    # Move to dir_b
-    log.change_rundir(dir_b)
-
-    # Now the file handler should point to dir_b/envos.log
-    file_handlers = [h for h in lg.handlers if isinstance(h, logging.FileHandler)]
-    assert len(file_handlers) == 1, "Should still have exactly 1 FileHandler after change_rundir"
-
-    new_path = pathlib.Path(file_handlers[0].baseFilename)
-    assert new_path.parent == dir_b.resolve(), (
-        f"FileHandler should point into {dir_b}, but points to {new_path.parent}"
+    assert stream_handlers, "No StreamHandler found"
+    assert stream_handlers[0].level == logging.WARNING, (
+        f"Stream handler should be WARNING, got {stream_handlers[0].level}"
+    )
+    assert file_handlers, "No FileHandler found"
+    assert file_handlers[0].level == logging.DEBUG, (
+        f"File handler should be DEBUG, got {file_handlers[0].level}"
     )
 
-    # Clean up
-    log.unset_logfile("envos")
+    # Cleanup
+    log.setup(level="INFO")
 
 
 # ---------------------------------------------------------------------------
-# StandardFormatter: no debug artifact in output (D-65 / P1-5 item 4)
+# update_logfile(): DeprecationWarning + functional forwarding to setup().
+# ---------------------------------------------------------------------------
+
+def test_update_logfile_emits_deprecation_warning(tmp_path):
+    """update_logfile() must emit a DeprecationWarning."""
+    import envos.log as log
+
+    logfile = tmp_path / "dep.log"
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        log.update_logfile(filepath=logfile)
+
+    dep_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert dep_warnings, "update_logfile() must emit a DeprecationWarning"
+
+    # Cleanup
+    log.setup(level="INFO")
+
+
+def test_update_logfile_still_configures_logging(tmp_path):
+    """update_logfile(filepath=...) still creates the log file via setup()."""
+    import envos.log as log
+
+    logfile = tmp_path / "dep_test.log"
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        log.update_logfile(filepath=logfile)
+
+    assert logfile.exists(), "update_logfile() must create the log file"
+    assert _count_file_handlers(log.logger) == 1, (
+        f"Expected 1 FileHandler after update_logfile(), "
+        f"got {_count_file_handlers(log.logger)}"
+    )
+
+    # Cleanup
+    log.setup(level="INFO")
+
+
+# ---------------------------------------------------------------------------
+# StandardFormatter: no debug artifact in output.
 # ---------------------------------------------------------------------------
 
 def test_standard_formatter_no_debug_artifact():

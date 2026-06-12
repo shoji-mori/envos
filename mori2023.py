@@ -320,7 +320,7 @@ def synobs(
     """
     set logging
     """
-    envos.log.update_logfile()
+    envos.log.setup(logfile=conf.log_path)
     conf.log()
 
 

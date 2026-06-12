@@ -4,8 +4,7 @@ import textwrap
 from pathlib import Path
 from dataclasses import dataclass, asdict, replace
 
-# from . import log
-from .log import logger, update_logfile
+from .log import logger, setup as _log_setup
 from envos.gpath import _register as _register_gpath
 from envos import log
 
@@ -338,14 +337,13 @@ class Config:
         # global path access reflects this run) and configure logging.
         _register_gpath(self)
 
-        if self.logfile is not None:
-            update_logfile()
-
-        if self.level_stdout is not None:
-            log.set_level("envos", self.level_stdout, target="stream")
-
-        if self.level_logfile is not None:
-            log.set_level("envos", self.level_logfile, target="file")
+        # P2-C: single call to log.setup() replaces update_logfile/set_level.
+        # logfile=None when self.logfile is None to preserve existing handlers.
+        _log_setup(
+            level=self.level_stdout or "INFO",
+            logfile=(self.log_path if self.logfile is not None else None),
+            file_level=self.level_logfile,
+        )
 
     def replaced(self, **changes):
         return replace(self, **changes)

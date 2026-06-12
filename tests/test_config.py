@@ -1,9 +1,10 @@
 """
-Tests for envos/config.py and envos/__init__.py (P1-4).
+Tests for envos/config.py and envos/__init__.py (P1-4 / P2-C).
 
 Covers:
 - Config(logfile=...) creates the log file without crashing (B-12)
 - Config generated twice does not accumulate extra file handlers (B-12)
+- Config(logfile=None) does not add a FileHandler (idempotency / P2-C)
 - level_stdout wiring: stream handler level is set correctly (追補-72)
 - from envos import * succeeds (B-13) -- also tested in test_smoke.py
 """
@@ -16,6 +17,13 @@ import pytest
 
 def _count_file_handlers(lg):
     return sum(1 for h in lg.handlers if isinstance(h, logging.FileHandler))
+
+
+def _count_stream_handlers(lg):
+    return sum(
+        1 for h in lg.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -31,13 +39,12 @@ def test_config_with_logfile_creates_file(tmp_path):
 
     logfile = tmp_path / "envos.log"
 
-    # This used to raise KeyError because of set_logfile("on") (B-12)
     config = Config(run_dir=str(tmp_path), logfile=str(logfile))
 
     assert logfile.exists(), "Log file should be created after Config(logfile=...)"
 
-    # Clean up
-    log.unset_logfile("envos")
+    # Cleanup: reset to no-file state
+    log.setup(level="INFO")
 
 
 def test_config_twice_no_handler_proliferation(tmp_path):
@@ -54,14 +61,32 @@ def test_config_twice_no_handler_proliferation(tmp_path):
     Config(run_dir=str(tmp_path), logfile=str(logfile))
     Config(run_dir=str(tmp_path), logfile=str(logfile))
 
-    lg = log.loggers["envos"]
+    lg = log.logger
     n = _count_file_handlers(lg)
     assert n == 1, (
         f"Expected exactly 1 FileHandler after two Config() calls, got {n}"
     )
 
-    # Clean up
-    log.unset_logfile("envos")
+    # Cleanup
+    log.setup(level="INFO")
+
+
+def test_config_without_logfile_no_file_handler(tmp_path):
+    """
+    Config(logfile=None) must not add a FileHandler (idempotency / P2-C).
+    """
+    import envos.log as log
+    from envos.config import Config
+
+    # Ensure we start with no file handler
+    log.setup(level="INFO")
+    assert _count_file_handlers(log.logger) == 0
+
+    Config(run_dir=str(tmp_path))
+
+    assert _count_file_handlers(log.logger) == 0, (
+        "Config without logfile must not add a FileHandler"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +102,7 @@ def test_config_level_stdout_sets_stream_handler(tmp_path):
 
     Config(run_dir=str(tmp_path), level_stdout="DEBUG")
 
-    lg = log.loggers["envos"]
+    lg = log.logger
     stream_handlers = [
         h for h in lg.handlers
         if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
@@ -90,7 +115,7 @@ def test_config_level_stdout_sets_stream_handler(tmp_path):
         )
 
     # Restore to INFO
-    log.set_level("envos", "INFO", target="stream")
+    log.setup(level="INFO")
 
 
 # ---------------------------------------------------------------------------
