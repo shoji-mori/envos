@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from . import tools, cubicsolver, tsc, column_density
 from .nconst import G, kB, amu, au, Msun
-from .gpath import run_dir
+from . import gpath
 from .log import logger
 
 
@@ -58,7 +58,7 @@ class ModelBase:
 
     def save_pickle(self, filename, filepath=None):
         if filepath is None:
-            filepath = os.path.join(run_dir, filename)
+            filepath = os.path.join(gpath.run_dir, filename)
         dirpath = os.path.dirname(filepath)
         os.makedirs(dirpath, exist_ok=True)
         pd.to_pickle(self, filepath)
@@ -66,7 +66,7 @@ class ModelBase:
 
     def read_pickle(self, filename=None, filepath=None):
         if (filename is not None) and (filepath is None):
-            filepath = os.path.join(run_dir, filename)
+            filepath = os.path.join(gpath.run_dir, filename)
         tools.setattr_from_pickle(self, filepath)
 
     def get_midplane_profile(self, vname, dtheta=0.03, ntheta=1000, vabs=False):
@@ -203,7 +203,9 @@ class CircumstellarModel(ModelBase):
     def calc_midplane_average(self):
         vnames = ["rhogas", "rhodust", "vr", "vt", "vp", "Tgas", "Tdust"]
         for _vn in vnames:
-            _val = self.take_midplane_average(_vn)
+            if getattr(self, _vn, None) is None:
+                continue
+            _val = self.get_midplane_profile(_vn)
             setattr(self, _vn + "_mid", _val)
 
     def calc_column_density(self, colr=True, colz=True, colt=False):
@@ -246,6 +248,11 @@ class CassenMoosmanInnerEnvelope(ModelBase):
         rho = -Mdot / (4 * np.pi * self.rr**2 * self.vr * (1 + 2 * zeta * P2))
         cavmask = np.array(np.abs(self.mu0) <= np.cos(cavangle), dtype=float)
         self.rho = rho * cavmask
+        if np.isnan(self.rho).any():
+            logger.warning(
+                "NaN in inner-envelope density "
+                "(no cubic solution at some cells)"
+            )
 
     def _sol_with_cubic(self, m, zeta):
         allsols = np.round(cubicsolver.solve(zeta, 0, 1 - zeta, -m).real, 8)
@@ -364,17 +371,21 @@ class PowerlawDisk(Disk):
             tailprof = np.exp(-(_R ** (ind_tail)))
         elif self.tail == "cut":
             tailprof = np.where(_R < 1, 1, 0)
+        else:
+            raise ValueError(
+                f"Unknown tail type '{self.tail}'; expected 'exp' or 'cut'"
+            )
         # Sigma0 = Mdisk * (ind_S + 2.) / (2*np.pi * Rd**2)  # assume ind_rho < -2
         Sigma0 = Mdisk / (
             2 * np.pi * Rd**2 * integrate.simpson(_R * power * tailprof, _R)
         )
-        print(
+        logger.info(
             f"Disk surface density profile: Sigma = {Sigma0} g/cm2 * (R/{Rd/au}au)**({ind_S})"
         )
         Mdisk_check = integrate.simpson(
             2 * np.pi * self.rc_ax * Sigma0 * power * tailprof, self.rc_ax
         )
-        print(
+        logger.info(
             f"Actual total disk mass = {Mdisk_check/Msun} Msun , excepted mass = {Mdisk/Msun} Msun "
         )
         Sigma_R = Sigma0 * power * tailprof
