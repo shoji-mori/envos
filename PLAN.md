@@ -1,6 +1,6 @@
 # envos リファクタリング作業計画書(PLAN.md)
 
-- **版**: v1.2(検証反復3回目で収束。改訂履歴と検証ログは§10-11)
+- **版**: v2.0(検証反復5回目。改訂履歴と検証ログは§10-11)
 - **対象リポジトリ**: shoji-mori/envos
 - **前提文書**: `ISSUES.md`(コードレビュー結果70件+追補。本計画のタスクは原則 ISSUES.md の項目に対応。対応表は付録B)
 - **想定読者**: 本リポジトリを初めて触る開発者。Python・科学計算の経験はあるが envos の内部構造は知らない人。
@@ -15,7 +15,20 @@
 4. **物理結果が変わる修正(「⚠物理変更」マーク)は、ゴールデンデータ(P0-4)の再生成と変化量の定量的な記録をPR本文に必ず含める。** PRに `physics-change` ラベルを付ける。
 5. 各タスクの「受け入れ基準」を全て満たしたら完了。判断に迷ったら「§9 未決事項」(D1〜D9)の推奨案に従う。
 6. テストは `pytest`。`radmc3d` バイナリが必要なテストは `@pytest.mark.radmc`、遅いテストは `@pytest.mark.slow` を付け、CIデフォルトジョブから除外する。
-7. 本文中の行番号は **2026-06-12 時点の HEAD(コミット 9cd3bac 系列)** のもの。先行タスクの完了で行番号はずれるため、引用されているコード断片で位置を特定すること。
+7. 本文中の行番号は **2026-06-12 時点の HEAD(コミット 9cd3bac 系列)** のもの。先行タスクの完了で行番号はずれるため、**位置の特定は必ず引用されているコード断片(アンカー)の grep で行う**こと(例: P1-3 なら `git grep -n "def set_radmcdir"`)。行番号は補助情報にすぎない。
+8. **PR本文テンプレート**(全タスク共通):
+   ```
+   ## タスク: <PLAN.md のタスクID> <タイトル>
+   ## 対応する ISSUES: <番号列挙>
+   ## 変更内容: <箇条書き>
+   ## 検証: <実行したテスト・受け入れ基準の充足>
+   ## 物理変更: なし / あり(変化量: ...、ゴールデン再生成: G*)
+   ## 削除シンボル: なし / あり(各シンボルの git grep 結果が定義行のみであることを確認済み)
+   ```
+9. **削除の判断基準**(本計画全体で統一):
+   - 削除する: (a) リポジトリ内で呼び出し元ゼロ、**かつ** (b) 壊れている・到達不能・重複実装のいずれか。
+   - 残す: 呼び出し元ゼロでも、動作しており公開APIとして意図されたもの(§2.6 の一覧)。修正コストが極小なら直す。
+10. **ロールバック方針**: 各タスクは独立PRなので revert 単位もPR。⚠物理変更PRの revert 時はゴールデンデータも同時に戻すこと(`tests/golden/` の変更が同一コミットに含まれていることを保証する)。
 
 ---
 
@@ -71,6 +84,11 @@
 - `envos/log.py`: `DebugFormatter`(204-221)、`color`(167-181)— P2-C で削除
 - `envos/header.py`: モジュール全体(どこからも import されていない。Python2 向けバージョンチェックの残骸。C-62 はこの削除でクローズ)
 - `envos/model_generator.py`: `read_model` の到達不能 `return`(295)
+- `envos/physical_params.py`: `calc_dependent_params`(6-52。`PhysicalParameters` と重複したモジュール関数で呼び出し元ゼロ、かつ B-26 のバグ持ち → §0-9 の基準により削除対象。P1-6)
+
+### 2.6 リポジトリ内未使用だが「残す」公開メソッド(§0-9 基準の (b) を満たさないもの)
+観測データ解析用の公開APIとして意図されたと推定されるため**削除しない**。ただしテスト整備の優先度は低く、修正タスクの対象箇所以外はテストを書かなくてよい:
+`BaseObsData` の `mask / reverse_ax / reversed_ax_data / move_position / move_center / get_Imax_pos / ra / dec / radec / freq / set_coord_from_radec*`、`Image.convert_perbeam_to_perpixel`、`CircumstellarModel.calc_midplane_average`(B-28 で1行修正して残す)、`tools.find_roots / x_cross_zero / make_array_center / make_array_interface / compute_object_size / show_used_memory`、`obs.read_image_fits / read_pv_fits / read_cube_fits`(P2-D の対象)、`datacor.calc_datacor`(外部利用想定)。
 
 ---
 
@@ -99,6 +117,37 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 | Phase 2-C | 1〜2人日 |
 | Phase 2-D | 4〜6人日 |
 
+### 3.4 バージョニング方針
+- 現行 `__version__ = "1.0.0"` を維持したまま M0/M1 を進める。
+- **M1 完了時に `v1.1.0` をタグ**(後方互換のバグ修正リリース。デッドコード削除は §0-9 基準のもののみ)。
+- **M2 完了時に `v2.0.0` をタグ**(`tools.savefile` 等のシグネチャ変更、gpath/update_logfile の Deprecation を含むため)。Deprecation シムは v2.x の間維持し、v3 で削除。
+- `pyproject.toml` と `envos/__init__.py` のバージョンは P0-1 で単一情報源化(`[project] dynamic = ["version"]` + `attr: envos.__version__`)。
+
+### 3.5 テストファイル台帳(タスクとの対応)
+| テストファイル | 作成タスク | 主な利用タスク |
+|---|---|---|
+| `tests/conftest.py`(Agg設定、G1モデルの session フィクスチャ) | P0-3 | 全タスク |
+| `tests/test_smoke.py` | P0-3 | 全タスク |
+| `tests/test_golden.py` + `tests/make_golden.py` + `tests/golden/` | P0-4 | P1-1, P1-9, 全⚠タスク |
+| `tests/test_tools.py`(shell/filecopy/dataclass_str) | P1-2 | P2-A |
+| `tests/test_gpath.py` → P2-A で `tests/test_paths.py` に改組 | P1-3 | P2-A |
+| `tests/test_config.py`(logfile/level/`from envos import *`) | P1-4 | P2-C |
+| `tests/test_log.py`(ハンドラ非増殖・レベル) | P1-5 | P2-C |
+| `tests/test_physical_params.py` | P1-6 | — |
+| `tests/test_grid.py` | P1-7 | — |
+| `tests/test_models.py`(save先・midplane average) | P1-8 | P2-A |
+| `tests/test_model_generator.py`(f_dg・disk合成 G4) | P1-9 | — |
+| `tests/test_radmc3d.py`(入力ファイル生成。radmc3d 実行は不要な範囲) | P1-10 | P2-A |
+| `tests/test_obsdata.py`(合成 Cube/Image/PVmap の操作系) | P1-11 | P2-B, P2-D |
+| `tests/test_streamline.py` | P1-13 | P2-A |
+| `tests/test_column_density.py` | P1-14 | — |
+| `tests/test_datacor.py` | P1-15 | — |
+| `tests/test_plot.py`(Agg 完走系) | P1-16〜18 | — |
+| `tests/test_examples.py`(slow/radmc) | P1-19 | M1 確認 |
+| `tests/test_paths.py`(多重 run_dir) | P2-A | P2-B〜D |
+| `tests/test_pickle_compat.py` + `tests/data/cube_legacy.pkl` | P2-B | — |
+| `tests/test_fits_io.py` + `tests/data/`(合成FITS) | P2-D | — |
+
 ---
 
 ## 4. Phase 0: 安全網の構築
@@ -106,7 +155,7 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 ### P0-1: パッケージングとインストール手順の整備
 - **依存**: なし
 - **作業**:
-  1. `pyproject.toml` を新規作成(setuptools backend)。`name="envos"`, `version="1.0.0"`(`envos/__init__.py:25` と一致)、`requires-python=">=3.9"`(D3)。
+  1. `pyproject.toml` を新規作成(setuptools backend)。`name="envos"`、バージョンは `dynamic = ["version"]` + `[tool.setuptools.dynamic] version = {attr = "envos.__version__"}` で `envos/__init__.py:25` を単一情報源に(§3.4)。`requires-python=">=3.9"`(D3)。
   2. dependencies: `numpy`, `scipy>=1.6`, `pandas`, `matplotlib`, `astropy`, `scikit-image`。
      `radmc3dPy` は PyPI に無いため dependencies に**入れず**、README に手順を明記(既存 README §4.1 を維持)。
   3. `[project.optional-dependencies]`: `dev = ["pytest", "ruff"]`、`extra = ["joblib", "psutil"]`。
@@ -170,6 +219,32 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 
 **P1-2 を最初に**(以降の radmc3d 系作業の信頼性に直結)。P1-5 → P1-4 の順序制約あり。他は並列可。末尾括弧は ISSUES.md 項目番号。
 
+### リスクと規模の一覧
+リスク = 修正が新たな不具合や挙動変化を生む可能性。規模 = 想定 diff 行数(テスト除く)。
+
+| タスク | リスク | 規模 | リスクの根拠 |
+|---|---|---|---|
+| P1-1 | 中 | ~5行 | ⚠物理変更(0.33%)。ゴールデン再生成を伴う |
+| P1-2 | **高** | ~80行 | shell() は radmc3d 実行の要。書き直しのため radmc 環境での手動確認必須(受け入れ基準に含む) |
+| P1-3 | 低 | 2行 | — |
+| P1-4 | 低 | ~20行 | P1-5 完了が前提 |
+| P1-5 | 中 | ~40行 | ロギングは全モジュールに波及。テストで非増殖を担保 |
+| P1-6 | 低 | ~40行 | 削除+ガード追加のみ |
+| P1-7 | 低 | ~15行 | 例外化のみ(正常系の数値は不変) |
+| P1-8 | 低 | ~15行 | — |
+| P1-9 | 中 | ~25行 | ⚠disk 使用時の物理変更(D1)。G4 新設 |
+| P1-10 | 中 | ~40行 | radmc3d 入力ファイル生成に触れる。ファイル内容のバイト一致テストで担保 |
+| P1-11 | **高** | ~120行 | 観測データクラスの中核。項目が多いため**コミットを項目単位に分割**すること |
+| P1-12 | 低 | -400行 | 削除のみ(§0-9 の基準と grep 確認に従う) |
+| P1-13 | 低 | ~30行 | mirror 削除は D5 で承認済み |
+| P1-14 | 低 | ~15行 | — |
+| P1-15 | 低 | ~10行 | — |
+| P1-16 | 中 | ~40行 | ピーク探索はプロットの数値出力(質量推定)に影響。合成データで定量検証 |
+| P1-17 | 低 | ~15行 | 図のみの変化 |
+| P1-18 | 低 | ~10行 | — |
+| P1-19 | 低 | ~60行 | examples のみ |
+| P1-20 | 低 | ~20行 | 研究スクリプトのガードのみ |
+
 ### P1-1: 物理定数の修正 ⚠物理変更(A-1)
 - **対象**: `envos/nconst.py:28-29`
 - **修正**: `year = yr = 3.15576e7`(ユリウス年 365.25 日)。`Myr = 3.15576e13`。出典コメントを付す。
@@ -192,7 +267,7 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
   4. `dataclass_str()`(217行): リスト分岐直後の `if isinstance(v, np.ndarray)` を `elif` に。
   5. `savefile()`(31行): `mkdir(parents=True, exist_ok=True)`。
 - **テスト**: `shell("false")` が例外。`shell("echo ERROR x", error_keyword="ERROR")` が例外。`shell("echo ok")` が正常終了しログに "ok"。`filecopy` の既存先スキップ。
-- **受け入れ基準**: テストパス。`grep -n "simple" envos/tools.py` が(変数として)ヒットしない。
+- **受け入れ基準**: テストパス。`grep -n "simple" envos/tools.py` が(変数として)ヒットしない。**さらに、radmc3d のある環境(ローカルまたは CI の test-full ジョブ)で `calc_thermal_structure` のスモークを1回実行し、書き直した `shell()` 経由の radmc3d 実行・ログ転送・エラー検出が機能することを確認する**(本タスクはリスク「高」のため実機確認を必須とする)。
 
 ### P1-3: `gpath.set_radmcdir` の修正(B-11)
 - **対象**: `envos/gpath.py:34-37`
@@ -217,7 +292,7 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 ### P1-5: `log.py` の最小修正(B-29, B-30, D-65)
 - **対象**: `envos/log.py`(全面再設計は P2-C。ここでは壊れている関数のみ)
 - **修正**:
-  1. `unset_logfile(name)`(123-129行): `logger.removeHandler` → `loggers[name].removeHandler`、`for hdlr in list(loggers[name].handlers):` とコピーへの反復に。
+  1. `unset_logfile(name)`(123-129行): `logger.removeHandler` → `loggers[name].removeHandler`、`for hdlr in list(loggers[name].handlers):` とコピーへの反復に。remove の前に `hdlr.close()` を呼ぶ(ファイルディスクリプタのリーク防止。`update_logfile` が繰り返し呼ばれるため)。
   2. `set_level`(133-156行): `ver` 引数と `ver==1` 分岐(グローバル `logger` 誤用)を削除。
   3. `change_rundir`(71-83行): 現実装は無効(str.replace の戻り値破棄)。書き直す: 各 FileHandler について `close()` → remove → `new_rundir / Path(旧baseFilename).name` で `add_file_hdlr(logger, 新パス, level=旧level, write_mode="a")`。
      ※ 唯一の呼び出し元は `gpath.update_all_dirs_dependent_on_rundir`(gpath.py:67)。
@@ -225,11 +300,13 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 - **テスト**: `update_logfile()` を2回呼んでもハンドラが増殖しない。`set_level("envos","DEBUG")` で stream handler が DEBUG。`Config(run_dir=A)` 後にログファイル設定→ `Config(run_dir=B)` でログ出力先が B に移る。
 - **受け入れ基準**: テストパス。`mori2023.py:322` 相当の `envos.log.update_logfile()` が動く。
 
-### P1-6: `physical_params.calc_dependent_params` の修正(B-26)
-- **対象**: `envos/physical_params.py:25-41`
-- **修正**: `t_yr` 分岐(28-30行)に `Ms = Mdot * t` を追加(クラス側 `calc_Ms` 94-102行と同じロジックに揃える)。さらに3つのパラメータ群それぞれで、どの分岐にも入らなかった場合に `ValueError("insufficient parameters: specify one of ...")` を送出するガードを追加。`PhysicalParameters.calc_Mdot/calc_Ms/calc_jmid` にも同じガード(現状は `UnboundLocalError`)。
-- **テスト**: `calc_dependent_params(T=10, t_yr=1e5, CR_au=100, meanmolw=2.3)` が全キー非Noneの辞書。`PhysicalParameters()`(引数不足)が `ValueError`。
-- **受け入れ基準**: G3 不変。
+### P1-6: `physical_params.py` の整理(B-26)
+- **対象**: `envos/physical_params.py`
+- **修正**:
+  1. **`calc_dependent_params`(6-52行)を削除**(検証パス4で呼び出し元ゼロを確認。`PhysicalParameters` と完全に重複したモジュール関数であり、`t_yr` 経路の `Ms` 未定義バグ(B-26)を抱えたまま放置されてきた。§0-9 の基準 (a)+(b) を満たす。B-26 は削除でクローズ)。
+  2. `PhysicalParameters.calc_Mdot / calc_Ms / calc_jmid`(81-124行)に、どの分岐にも入らなかった場合の `ValueError("insufficient parameters: specify one of (T, Mdot_smpy) / (Ms_Msun, t_yr) / (CR_au, jmid, Omega, rexp_au+Omega)")` ガードを追加(現状は `UnboundLocalError` / `AttributeError` で不親切)。
+- **テスト**: `PhysicalParameters(T=10, t_yr=1e5, CR_au=100)` が全属性非None。`PhysicalParameters()` / `PhysicalParameters(T=10)`(不足)が `ValueError`。
+- **受け入れ基準**: G3 不変。`git grep calc_dependent_params` が0件。
 
 ### P1-7: `grid.py` の修正(C-50, C-51。B-27 は P1-12 でデッドコードごと削除)
 - **対象**: `envos/grid.py`
@@ -244,7 +321,7 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 - **対象**: `envos/models.py`
 - **修正**:
   1. 9行 `from .gpath import run_dir` → `from . import gpath`。61・69行の `run_dir` → `gpath.run_dir`(呼び出し時点の値を参照。恒久対応は P2-A)。
-  2. `calc_midplane_average`(203-207行): `self.take_midplane_average(_vn)` → `self.get_midplane_profile(_vn)`(72-79行の既存メソッド)。
+  2. `calc_midplane_average`(203-207行): `self.take_midplane_average(_vn)` → `self.get_midplane_profile(_vn)`(72-79行の既存メソッド)。※リポジトリ内未使用だが §2.6 の方針(動く公開APIは残す)により1行修正で残す。回帰保護のテストを追加。
   3. `PowerlawDisk.get_Sigma`(359-366行): `tail` が `"exp"`/`"cut"` 以外なら `ValueError`。
   4. `CassenMoosmanInnerEnvelope.calc_kinematic_structure` 末尾: `if np.isnan(self.rho).any(): logger.warning("NaN in inner-envelope density (no cubic solution at some cells)")` を追加(挙動は維持、可視化のみ)。
   5. 371-378行の `print(...)` 2箇所を `logger.info` に。
@@ -258,6 +335,7 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
   2. **ディスク合成(182-190行)を置換方式に統一(D1)**: `rho += self.disk.rho` を削除し、`rho[cond] = self.disk.rho[cond]` に変更(`cond = rho < self.disk.rho`)。速度の扱い(cond 領域のみ置換)は現状維持。⚠ `disk="powerlaw"` 使用時のみ結果が変わる。**本PRでディスク付きゴールデン G4(G1+`disk="powerlaw"`)を新規追加・生成**する。
   3. `read_model`(290-295行): `raise Exception("Still constructing...")` → `NotImplementedError("only .pkl is supported")`。到達不能 `return`(295行)を削除。
   4. `set_disk` 内 `print(config)`(258行)を `logger.info` に。
+  5. **C-49(TSCスムージングの密度/速度の非整合、166-171行)は修正しない(D10)**: `calc_kinematic_structure` の docstring に「smoothing_TSC=True ではキャビティ内(rho==0)で速度のみ TSC とブレンドされる既知の非整合がある」と明記するに留める(物理コードの挙動固定の原則)。
 - **テスト**: config 無しの手動組み立て(`set_grid`→`set_physical_parameters`→`set_inenv` 相当)で `calc_kinematic_structure()` が通る。`disk="powerlaw"` 付きスモーク。
 - **受け入れ基準**: G1 不変。G4 新規追加。
 
@@ -282,22 +360,23 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 - **テスト**: `set_model(存在しないパス)` が `FileNotFoundError`。`rhodust=None` のモデルで `set_mctherm_inpfiles` が成功し `dust_density.inp` の値が `rhogas*f_dg` と一致(ファイルをパースして検証)。`Config(nonlte=1)` → `RadmcController` が `NotImplementedError`。
 - **受け入れ基準**: `examples/make_userdefined_model.py` のモデル構築部(radmc3d 実行手前まで)が動く。
 
-### P1-11: `obs.py` バグ修正(A-3〜A-7, C-44〜C-47, 追補-71)
+### P1-11: `obs.py` バグ修正(A-3〜A-7, C-45〜C-47, C-59〜C-61, 追補-71, 77)
 - **対象**: `envos/obs.py`
 - **修正**:
   1. **`or` パターンの除去**: 209-211行・288-292行の `incl = incl or self.incl` 等を全て `x = x if x is not None else self.x` 形式に。211行のタイポは `posang = posang if posang is not None else self.posang` に修正。`gen_radmc_cmd` 54行 `if vc_kms` → `if vc_kms is not None`。
   2. `observe_cont` 223行: `npixy=self.npixx` → `npixy=self.npixy`。
   3. `observe_line` 312行: `"iline": self.iline` → `"iline": iline`(ローカル変数)。
-  4. `get_mom0_map`(1174-1200行)の vlim バグ:
+  4. `get_mom0_map`(1174-1200行)の vlim バグ(A-3)+ Iunit 非整合(追補-77):
      ```python
      _Ippv, _vkms = self.Ippv, self.vkms
      if vlim is not None:
-         (検証して) cond = (vlim[0] < _vkms) & (_vkms < vlim[1])
+         (len(vlim)==2 and vlim[0]<vlim[1] を検証、不正は ValueError)
+         cond = (vlim[0] < _vkms) & (_vkms < vlim[1])
          _Ippv = _Ippv[..., cond]; _vkms = _vkms[cond]
-     if method == "sum":       _Ipp = np.sum(_Ippv, axis=-1) * (_vkms[1] - _vkms[0])
+     if method == "sum":         _Ipp = np.sum(_Ippv, axis=-1) * (_vkms[1] - _vkms[0])
      elif method == "integrate": _Ipp = integrate.simpson(_Ippv, x=_vkms, axis=-1)
      ```
-     `shape[2]==1` の特例は維持。⚠ vlim 指定時のみ結果が変わる(従来は黙って無視=バグ修正として記録)。
+     `shape[2]==1` の特例は維持。正規化は `_Ipp /= max` の直接除算をやめ、`Image` 構築後に `if normalize == "peak": img.norm_I("max")` とする(`norm_I` が `Iunit` も更新するため追補-77 が同時に解消)。⚠ vlim 指定時のみ結果が変わる(従来は黙って無視=バグ修正として記録)。
   5. `refpos: RefPos = RefPos()`(1153, 1268, 1316行)→ `dataclasses.field(default_factory=RefPos)`。
   6. `_reset_positive_axes`(569-573行)の再設計: シグネチャを `_reset_positive_axes(self)` に変更。`for i, name in enumerate(self._axnames):` で `ax = getattr(self, name)` を取り、`ax is not None and len(ax) >= 2 and ax[1] < ax[0]` なら `setattr(self, name, ax[::-1])` + `self.set_I(np.flip(self.get_I(), axis=i))`。呼び出し元3箇所(`Cube/Image/PVmap.__post_init__`)を引数なし呼び出しに更新。
   7. `set_refpoint`(1011行): `self.refpos.dec = dec0` → `self.refpos.dec0 = dec0`。
@@ -307,7 +386,11 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
   11. `Image.__post_init__`(1282行): InitVar 未宣言の `vkms0` 引数(常に None のデッド引数。しかも `tools.vkms_to_freq(vkms0)` は必須第2引数欠落)を削除。
   12. `_subcalc`(426行、C-59): `open(os.devnull, "w")` を `with` 文に変更してリークを解消(`with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):`)。
   13. `Convolver.__init__`(496-523行、C-60): `mode == "null"` ならカーネル構築をスキップして即 return。それ以外で `beam_maj_au` / `beam_min_au` が `None` なら `ValueError("beam size is required for convolution")`(現状は `None + 1e-100` の不親切な TypeError)。
-  14. `Obreso.__post_init__`(1082-1087行、C-61): au・deg の両方が `None` の場合 `ValueError("specify beam size in au or deg")`(現状は `np.deg2rad(None)` の TypeError)。
+  14. `Obreso.__post_init__`(1082-1087行、C-61)のバリデーションを厳密化。現状は**部分指定**(例: `beam_maj_au=50, beam_min_au=None`)でも au 側ペアの再計算に入り `np.deg2rad(None)` で TypeError になる。仕様を次のとおり明文化して実装:
+      - `(beam_maj_au, beam_min_au)` が両方非None → deg 側を導出。
+      - そうでなく `(beam_maj_deg, beam_min_deg)` が両方非None → au 側を導出。
+      - どちらのペアも完全でない → `ValueError("specify both (beam_maj_au, beam_min_au) or both (beam_maj_deg, beam_min_deg); given: ...")`。
+      - `set_dpc_from_obsdata` の `print("Something wrong in obsdata")`(1109行)は `logger.warning` に変更。
 - **テスト**: 合成 Cube(解析的な3D配列)で (a) `get_mom0_map(vlim=...)` が範囲外チャネルを除外、(b) 2個の Cube の `refpos` が別オブジェクト、(c) 降順軸を与えた `Image` で軸とデータが整合して昇順化、(d) `trim` の往復、(e) `set_refpoint` 後に `refpos.dec0` が更新、(f) `Convolver(grid, mode="null")` がビーム未指定でも生成でき恒等変換、(g) `Obreso(ビーム情報なし)` が `ValueError`。
 - **受け入れ基準**: テストパス。既存スモーク・ゴールデン不変。
 
@@ -413,6 +496,26 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 #### P2-A-1: Config をパスの単一情報源にする
 - `Config` に解決済みパスを返す read-only プロパティを追加: `run_path / fig_path / radmc_path / storage_path / log_path`。
 - デフォルト解決規則を `Config` 内に一元化(現行 gpath の規則を踏襲): `run_dir` 未指定→`./run`、`radmc_dir`→`run/radmc`、`fig_dir`→`run/fig`、`logfile`→`run/log.dat`。
+- **実装スケッチ**(プロパティは dataclass フィールドと衝突しない別名にする点が要点):
+  ```python
+  @property
+  def run_path(self) -> Path:
+      return Path(self.run_dir) if self.run_dir is not None else Path("./run")
+
+  @property
+  def radmc_path(self) -> Path:
+      return Path(self.radmc_dir) if self.radmc_dir is not None else self.run_path / "radmc"
+
+  # fig_path, log_path も同型。storage_path のみ D9 の解決規則(下記)。
+  @property
+  def storage_path(self) -> Path:
+      if self.storage_dir is not None:
+          return Path(self.storage_dir)
+      legacy = Path(__file__).parents[1] / "storage"   # 旧: リポジトリ直下(1リリース維持)
+      if legacy.is_dir():
+          return legacy
+      return importlib.resources.files("envos") / "storage"
+  ```
 - **storage のデフォルト(D9)**: `storage/` ディレクトリを `envos/storage/` へ移動し(`git mv`)、`pyproject.toml` の package-data に登録。デフォルト解決は `importlib.resources.files("envos") / "storage"`。これにより editable 以外のインストールでも動く。リポジトリ直下の `storage/` を参照していた既存ユーザー向けに、旧位置が存在する場合はそちらを優先するフォールバックを1リリース残す。
 - ディレクトリの `mkdir` は「書き込む直前」に行う(`Config` 生成では作らない)。
 - `Config.__post_init__` の gpath 書き換え(334-348行)は当面残す(P2-A-3 で削除)。
@@ -436,6 +539,30 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
 
 #### P2-A-3: gpath をシム化
 - モジュール本体を「`__getattr__(name)` で DeprecationWarning を出しつつ、最後に適用された Config 由来の値(なければ従来のデフォルト)を返す」だけに縮小。`set_*` / `make_dirs` / `remove_radmcdir` は削除。
+- **実装スケッチ**(PEP 562 のモジュール `__getattr__` を使用。Python>=3.7 で利用可):
+  ```python
+  # envos/gpath.py(シム全体)
+  import warnings
+  _active_config = None   # Config.__post_init__ が _register(config) で設定
+
+  def _register(config):
+      global _active_config
+      _active_config = config
+
+  _LEGACY = {"run_dir": "run_path", "radmc_dir": "radmc_path", "fig_dir": "fig_path",
+             "storage_dir": "storage_path", "logfile": "log_path", "home_dir": None}
+
+  def __getattr__(name):
+      if name not in _LEGACY:
+          raise AttributeError(name)
+      warnings.warn(f"envos.gpath.{name} is deprecated; use Config.{_LEGACY[name] or '...'}",
+                    DeprecationWarning, stacklevel=2)
+      if name == "home_dir":          # mori2023.py:38 互換: 従来どおりパッケージ親
+          return Path(__file__).parents[1]
+      if _active_config is not None:
+          return getattr(_active_config, _LEGACY[name])
+      return _defaults[name]          # Config 未生成時の従来デフォルト
+  ```
 - リポジトリ内スクリプトを新APIに更新: `mori2023.py:38, 303`(`envos.gpath.*` 参照)。
 - `Config.__post_init__` の gpath 書き換えを削除し、シムへの登録(1行)に置換。
 
@@ -467,6 +594,25 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
   - `logger = logging.getLogger("envos")`(propagate=False、デフォルトで StreamHandler + StandardFormatter を1つ)
   - `setup(level="INFO", logfile=None, file_level=None)` — **冪等**(envos 由来の既存ハンドラを除去してから付け直す)。
   - `StandardFormatter`(P1-5 修正済みのものを流用)
+- **`setup()` の実装スケッチ**:
+  ```python
+  def setup(level="INFO", logfile=None, file_level=None):
+      """envos のロギングを(再)構成する。何度呼んでも安全。"""
+      for h in list(logger.handlers):
+          h.close()
+          logger.removeHandler(h)
+      logger.setLevel(logging.DEBUG)            # 出力制御はハンドラ側で行う
+      sh = logging.StreamHandler()
+      sh.setFormatter(StandardFormatter())
+      sh.setLevel(_to_level(level))
+      logger.addHandler(sh)
+      if logfile is not None:
+          Path(logfile).parent.mkdir(parents=True, exist_ok=True)
+          fh = logging.FileHandler(logfile, mode="a", encoding="utf-8")
+          fh.setFormatter(StandardFormatter())
+          fh.setLevel(_to_level(file_level or level))
+          logger.addHandler(fh)
+  ```
 - **削除**: `loggers` 辞書、`set_logger`、`change_rundir`、`update_logfile` / `set_logfile` / `unset_logfile`(→`setup` に統合)、`set_level`(→`setup`)、`DebugFormatter`・`color`(未使用。grep 確認済み)。`set_logfile` の `filename` 引数はもともと本体で未使用(追補-73)なので互換考慮不要。
 - **互換シム**: `update_logfile(**kw)` は DeprecationWarning + `setup` への転送として1リリース残す(`mori2023.py:322` が使用。同PRで mori2023 も `setup` に更新するが、外部ユーザー向けにシムは残す)。
 - `Config.__post_init__` は `log.setup(level=self.level_stdout or "INFO", logfile=self.logfile, file_level=self.level_logfile)` を呼ぶ形に簡約(P1-4 の実装を置換)。
@@ -488,6 +634,15 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
     - PVmap の書き出しは `CTYPE1="OFFSET"`(CASA の PV 出力に合わせる。現実装の "ANGLE" から変更)。
   - **書く関数**: `save_fits(obsdata, filepath)`(Cube/Image/PVmap で分岐)。`BaseObsData.save(mode="fits", filepath=...)` から呼ぶ(B-19 の根治)。
   - **読む関数**: `read_cube_fits / read_image_fits / read_pv_fits`(現名維持)。`read_fits` 本体は `_read_fits` に非公開化。`read_obsdata` の fits 分岐(P1-12 で NotImplementedError 化)をヘッダ判定によるディスパッチで復活(B-20 の根治)。
+  - **公開シグネチャ(確定仕様)**:
+    ```python
+    def save_fits(obsdata, filepath, overwrite=True) -> None
+    def read_cube_fits(filepath, dpc, unit1=None, unit2=None, unit3=None, v0_kms=0.0, Iunit=None, freq0=None) -> Cube
+    def read_image_fits(filepath, dpc, unit1=None, unit2=None, Iunit=None, freq0=None) -> Image
+    def read_pv_fits(filepath, dpc, unit1=None, unit2=None, v0_kms=0.0, Iunit=None, freq0=None) -> PVmap
+    # unit* はヘッダ CUNIT* の上書き用(None ならヘッダから取得)。
+    # 現行シグネチャとの差分: 未配線の unit*_cm/unit*_cms 引数を削除(呼び出し元なし確認済み)。
+    ```
   - `Cube.get_pv_map(save=True)`(P1-11 で NotImplementedError 化)を `save_fits` 接続で復活。
 - **テスト**:
   - **ラウンドトリップ**: Cube/Image/PVmap 各々で `save_fits → read_*_fits` の軸・データ・ビーム・refpos が `assert_allclose` で一致。
@@ -529,6 +684,7 @@ P0-1 → P0-2 → P0-3 ─┬→ P0-4
 | D7 | `nconst.Lsun=3.848e33`(IAU 3.828e33 と不一致) | **据え置き+コメント**(直すなら⚠物理変更の独立タスク) |
 | D8 | `rot_ccw`(未配線) | **docstring に「未実装」明記のみ**(P1-4)。実装するなら `vp` 符号反転の独立タスク |
 | D9 | `storage/` の配置とデフォルト解決(現状は editable install 前提) | **`envos/storage/` へ移動し importlib.resources で解決**(P2-A-1)。旧位置フォールバックを1リリース維持 |
+| D10 | C-49: TSCスムージング(`smoothing_TSC=True`)でキャビティ内(rho==0)は密度に外側エンベロープを混ぜないが速度は全域で混ぜる非整合 | **据え置き**(物理コードの挙動固定の原則。修正は⚠物理変更で TSC 使用時の全結果に影響)。P1-9 で docstring に既知の限界として明記。修正する場合は M2 以降に G2 ゴールデン再生成つきの独立タスク |
 
 ---
 
@@ -560,17 +716,19 @@ P0-1 → P0-2 → P0-3 ─┬→ P0-4
 | B-11 | P1-3(根治 P2-A) | B-40 | P1-19 |
 | B-12, B-13 | P1-4 | B-41 | P1-20 |
 | B-14〜B-16 | P1-10 | C-42, C-43 | P1-2 |
-| B-17, B-18 | P1-12 | C-44〜C-47 | P1-11 |
-| B-19〜B-22 | P2-D | C-48, C-49 | P1-9 |
-| B-23〜B-25 | P1-13 | C-50, C-51 | P1-7 |
-| B-26 | P1-6 | C-52 | **据え置き**(tsc.py の物理コード。非ゴール原則。コメント追記のみ任意) |
-| C-53 | P1-8(NaN警告のみ) | C-54, C-55 | P1-14 |
-| C-56 | P1-15 | C-57, C-58 | P1-10 |
-| C-59〜C-61 | P1-11(項12〜14) | C-62 | P1-12(header.py 削除でクローズ) |
-| D-63 | P1-4 | D-64 | P1-4(注記)/ D8 |
-| D-65 | P1-5 | D-66, D-67 | P2-A |
-| D-68 | P1-2 | D-69 | 据え置き(設計判断。pickle 継続) |
-| D-70 | P0-3〜P0-5 | 追補-71〜76 | P1-11 / P1-4 / P2-C / P1-12 / P1-2 / P1-12 |
+| B-17, B-18 | P1-12 | C-44 | **先送り(D2)**(⚠物理変更のため M2 以降の独立タスク) |
+| B-19〜B-22 | P2-D | C-45〜C-47 | P1-11 |
+| B-23〜B-25 | P1-13 | C-48 | P1-9 |
+| B-26 | P1-6(関数削除でクローズ) | C-49 | **据え置き(D10)**(P1-9 で docstring 注記のみ) |
+| C-50, C-51 | P1-7 | — | — |
+| C-52 | **据え置き**(tsc.py の物理コード。非ゴール原則) | C-53 | P1-8(NaN警告のみ。cubicsolver 本体は据え置き) |
+| C-54, C-55 | P1-14 | C-56 | P1-15 |
+| C-57, C-58 | P1-10 | C-59〜C-61 | P1-11(項12〜14) |
+| C-62 | P1-12(header.py 削除でクローズ) | D-63 | P1-4 |
+| D-64 | P1-4(注記)/ D8 | D-65 | P1-5 |
+| D-66, D-67 | P2-A | D-68 | P1-2 |
+| D-69 | 据え置き(設計判断。pickle 継続) | D-70 | P0-3〜P0-5 |
+| 追補-71〜76 | P1-11 / P1-4 / P2-C / P1-12 / P1-2 / P1-12 | 追補-77 | P1-11(項4) |
 
 ---
 
@@ -579,6 +737,7 @@ P0-1 → P0-2 → P0-3 ─┬→ P0-4
 - **v1.0**: 初版。
 - **v1.1**: 検証パス1の結果を反映(§11 ログ参照)。主な変更: デッドコード一覧の確定(§2.5)と P1-12 の横断タスク化、`shell()` を Popen 単一実装への書き直しに変更(進捗表示の維持)、G3 を (a)/(b) に分割(year 修正の影響を捕捉可能に)、nonlte の早期失敗位置を `__init__` に変更、`read_radmcdata` の移動先を simulator.py に訂正、P2-B に pickle 互換性の保証とテストを追加、D9(storage 配置)を新設、P2-A-2 の表に呼び出し元更新(mori2023)を明記。
 - **v1.2**: 検証パス2の結果を反映(§11 ログ参照)。主な変更: C-59〜C-61 を P1-11 の修正項目(項12〜14)として追加、`header.py` 削除を P1-12 に追加(C-62 クローズ)、P1-4 を `update_logfile()` 方式に変更、P2-A-2 の表に gpath 参照3箇所(tsc 図出力・kappa.save・plot_lineprofile)を追加、P2-D に fitstype 別の軸解釈(PV には経度軸が無い)と `CTYPE1="OFFSET"` の決定を追記、付録Bの C 系・D 系マッピングを全面訂正。検証パス3で収束を確認。
+- **v2.0**: 検証パス4(深掘り)の結果を反映(§11 ログ参照)。主な変更: §0 に PR テンプレ・削除判断基準・ロールバック方針を追加、§2.5 に `calc_dependent_params` を追加し P1-6 を「削除+ガード」に再定義(B-26 は削除でクローズ)、§2.6(未使用だが残す公開API一覧)新設、§3.4(バージョニング)・§3.5(テストファイル台帳)新設、Phase 1 にリスク・規模一覧を追加、P1-2 に実機確認の受け入れ基準を追加、P1-5 にハンドラ close を追加、P1-9 に C-49 の据え置き注記(D10 新設)、P1-11 項4 を `norm_I` 経由に変更(追補-77 解消)・項14 の Obreso 仕様を厳密化、P2-A-1/A-3/C/D に実装スケッチと確定シグネチャを追加、付録Bの誤割り付け(C-44 → D2、C-49 → D10)を訂正、P0-1 のバージョン管理を §3.4 と整合化。検証パス5で収束を確認。
 
 ## 11. 検証・自己批判ログ
 
@@ -611,6 +770,27 @@ v1.1 を頭から通読し、各タスクを「新規参加者が質問せずに
 
 ### 検証パス3(v1.2 の収束確認)
 v1.2 全体を通読し、(1) タスク間の依存関係の整合(P1-5→P1-4、P2-A→C→B→D)、(2) ISSUES.md 全項目(70+追補6)がいずれかのタスクまたは明示的な「据え置き」判断に割り付けられていること、(3) 受け入れ基準とテストの対応、(4) 公開API(付録A)と各タスクのシグネチャ変更の整合(変更箇所はすべて同一PRでの呼び出し元更新かシムを明記)を確認した。実質的な修正は発生せず、**v1.2 で収束**と判断する。
+
+### 検証パス4(v1.2 → v2.0、深掘り)
+「他の人が作業しても大丈夫」の水準を上げるため、(i) 各タスクの修正対象が本当に最適な処置か(修正/削除/据え置きの判断根拠)、(ii) 対応表の整合、(iii) Phase 2 の実装が一意に決まるか、の3観点で再検証した結果:
+
+1. **[矛盾] 付録Bで C-44(チャネル幅)を P1-11 に割り付けていたが、D2 では「先送り」と決定済み。** 自己矛盾。→ C-44 → D2(先送り)に訂正し、C-45〜C-47 のみ P1-11 に。
+2. **[矛盾] C-49(TSCスムージングの密度/速度非整合)を P1-9 に割り付けていたが、P1-9 の修正項目に存在しなかった。** 物理コードのため挙動固定の原則と衝突する。→ D10 を新設して「据え置き+docstring 注記」と明示。
+3. **[発見] `calc_dependent_params` は呼び出し元ゼロ**(grep 確認)。クラス版と完全重複でバグ持ち。「修正」より「削除」が `get_interface_coord` の扱いと一貫する。→ P1-6 を再定義。削除/維持の判断がタスクごとにぶれないよう、**判断基準を §0-9 に成文化**した(これにより `calc_midplane_average` は「動く公開APIは残す」側と明確化)。
+4. **[発見] obs.py の解析系メソッド群(mask/reverse_ax/move_center 等)もリポジトリ内未使用。** 削除はしないが、計画に記録がないと後続作業者が再調査することになる。→ §2.6 として一覧化し、テスト優先度の判断も付した。
+5. **[発見] `get_mom0_map(normalize="peak")` が `Iunit` を更新しない**(`norm_I` と非整合)。→ ISSUES 追補-77 として記録し、P1-11 項4 の実装を `norm_I("max")` 経由に変更して同時解消。
+6. **[不備] Obreso の検証仕様(P1-11 項14)が「両方 None」の場合しか想定しておらず、部分指定(maj_au のみ等)で従来どおり TypeError になる。** コードを再読して全分岐を確認。→ ペア完全性の仕様として厳密化。
+7. **[不備] P1-5 の `unset_logfile` 修正にハンドラの `close()` が無く、`update_logfile` の繰り返しで fd リーク。** → close を明記。
+8. **[不整合] §3.4(新設)の dynamic version と P0-1 の「version="1.0.0" を一致させる」が衝突。** → P0-1 を dynamic 方式に統一。
+9. **[不足] リスクの高いタスク(P1-2, P1-11)の扱いが他と同列だった。** → リスク・規模一覧を §5 冒頭に新設し、P1-2 に実機確認を受け入れ基準として追加、P1-11 にコミット分割の指示を追加。
+10. **[不足] Phase 2 は方針記述のみで、実装者の裁量が大きすぎた。** → P2-A-1(Config プロパティ)、P2-A-3(gpath シム、PEP 562)、P2-C(`setup()`)、P2-D(公開シグネチャ)に実装スケッチを追加。
+
+### 検証パス5(v2.0 の収束確認)
+v2.0 全体を機械的に照合(grep による相互参照チェック+付録B全行の目視)した。発見と対応:
+1. **[残存矛盾] 付録Bに v1.2 由来の旧行 `C-44〜C-47 → P1-11` が新行(C-44 → D2)と並存していた。** パス4の編集が表の一部しか置換していなかった。→ 表を再構成し、全項目が一意に割り付くことを行単位で確認。
+2. **[残存矛盾] P1-11 の見出しが旧範囲 `C-44〜C-47` のままだった。** → `C-45〜C-47, C-59〜C-61, 追補-71, 77` に訂正。
+
+上記2件の修正後、(1) 付録Bの全項目(A-1〜D-70、追補-71〜77)が「タスク割り付け」「先送り(D2)」「据え置き(D10 等)」のいずれかに**重複なく一意に**解決されること、(2) §0-9 の削除基準が P1-6 / P1-8 / P1-12 / §2.6 の判断と矛盾しないこと、(3) §3.5 テスト台帳が各タスクのテスト要件と対応すること、(4) 実装スケッチが既存コードの事実(dataclass フィールド名、mori2023 の gpath 使用箇所、PEP 562 の利用可否)と整合することを確認。grep による `C-44〜C-47` 残存参照の検索は0件。これ以上の照合で新たな矛盾は出なくなったため、**v2.0(本修正込み)で収束**と判断する。
 
 残存する既知の限界(計画として許容):
 - 行番号は HEAD 時点のもの。先行タスクでずれるため、引用コードでの特定を §0-7 で義務付けている。

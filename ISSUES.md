@@ -327,4 +327,8 @@ A → B → C → D の順での対応を推奨。
 76. **`envos/obs.py:1778-1787` — `__main__` ブロックに個人環境の絶対パスがハードコード**
     (`/home/smori/...`。Dランク相当)。
 
+77. **`envos/obs.py:1174-1200` — `Cube.get_mom0_map(normalize="peak")` が正規化後も `Iunit` を
+    更新しない。** 返される `Image` は無次元化されているのに単位は `Jy/pix` のまま
+    (`norm_I()` は `Iunit` を更新するのに対し非整合。Cランク相当)。
+
 対応計画は `PLAN.md` を参照(タスクID対応は PLAN.md 付録B)。
