@@ -1,3 +1,4 @@
+import re
 import subprocess
 import os
 import sys
@@ -28,7 +29,7 @@ def savefile(target, basename="file", mode="pickle", filepath=None):
         if filepath.exists():
             logger.info(f"remove old fits file: {filepath}")
             os.remove(filepath)
-        filepath.parent.mkdir(exist_ok=True)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
 
     if mode == "joblib":
         import joblib
@@ -214,7 +215,7 @@ def dataclass_str(self, _w=""):
             space_var = " " * len(var)
             txt += space + var + str(v).replace("\n", "\n" + space + space_var)
 
-        if isinstance(v, np.ndarray):
+        elif isinstance(v, np.ndarray):
             info = f"array(shape={np.shape(v)}, min={np.min(v):{_w}g}, max={np.max(v):{_w}g})"
             txt += space + var + info
 
@@ -242,68 +243,48 @@ def shell(
     error_keyword=None,
     logger=logger,
     log_prefix="",
-    simple=False,
 ):
-    error_flag = 0
-
     if dryrun:
         logger.info(f"(dryrun) {cmd}")
-        return 0
+        return
 
-    if cwd is not None:
-        pass
-        # msg += f"Change the working directory from {os.getcwd()} to {cwd}"
-        # msg += " while executing the command"
-    else:
+    if cwd is None:
         cwd = os.getcwd()
 
     logger.info(f'Running shell command at {cwd}:\n    "{cmd}"')
 
-    simple = 1
-    if simple:
-        if log:
-            return subprocess.run(cmd, shell=True, cwd=cwd)
-        else:
-            return subprocess.run(cmd, shell=True, cwd=cwd, stdout=subprocess.DEVNULL)
-
-    else:
-        proc = subprocess.Popen(
-            cmd,
-            shell=True,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-        )
-
-    if (error_keyword is not None): 
-        error_check = True
-        if isinstance(error_keyword, (tuple, list)):        
-            pattern = re.compile('|'.join(error_keyword))
+    if error_keyword is not None:
+        if isinstance(error_keyword, (tuple, list)):
+            pattern = re.compile("|".join(error_keyword))
         else:
             pattern = re.compile(error_keyword)
     else:
-        error_check = False
+        pattern = None
 
+    proc = subprocess.Popen(
+        cmd,
+        shell=True,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+    )
+
+    error_flag = False
     while True:
-        _line = proc.stdout.readline().rstrip()  # .decode("utf-8").rstrip()
-        print("line:", _line)
+        _line = proc.stdout.readline().rstrip()
         if _line:
             if log:
                 logger.info(log_prefix + _line)
-            if error_check and bool(pattern.search(_line)):
-                error_flag = 1
+            if pattern is not None and pattern.search(_line):
+                error_flag = True
 
-        # if output == '' and (process.poll() is not None):
         if (_line == "") and (proc.poll() is not None):
-            # if (not _line) and (proc.poll() is not None):
-            if log:
-                logger.info(" break print")
             break
 
     retcode = proc.wait()
 
-    if (retcode != 0) or (error_flag == 1):
+    if (retcode != 0) or error_flag:
         e = subprocess.CalledProcessError(retcode, cmd)
         if skip_error:
             logger.warning("Skip error:")
@@ -326,8 +307,9 @@ def filecopy(src, dst, error_already_exist=False):
             logger.error(msg)
             raise Exception(msg)
         else:
-            logger.warn(msg)
-            logger.warn("Do nothing.")
+            logger.warning(msg)
+            logger.warning("Do nothing.")
+            return
 
     try:
         shutil.copy2(src, dst)
