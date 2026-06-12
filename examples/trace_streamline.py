@@ -55,10 +55,10 @@ def main():
     print(model)
 
     # Draw useful figures...
-    envos.plot_tools.plot_midplane_density_profile(model)
-    envos.plot_tools.plot_midplane_velocity_profile(model)
-    envos.plot_tools.plot_midplane_temperature_profile(model)
-    envos.plot_tools.plot_midplane_velocity_map(model)
+    envos.plot_tools.plot_rhogas_midplane_profile(model)
+    envos.plot_tools.plot_velocity_midplane_profile(model)
+    envos.plot_tools.plot_Tgas_midplane_profile(model)
+    envos.plot_tools.plot_losvelocity_midplane_map(model)
 
     # There are two ways to get the physical values along streamlines:
     # (1) use trajectries option in plot_density_map

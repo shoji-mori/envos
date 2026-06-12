@@ -56,10 +56,10 @@ def main():
     print(model)
 
     # Draw useful figures...
-    envos.plot_tools.plot_midplane_density_profile(model)
-    envos.plot_tools.plot_midplane_velocity_profile(model)
-    envos.plot_tools.plot_midplane_temperature_profile(model)
-    envos.plot_tools.plot_midplane_velocity_map(model)
+    envos.plot_tools.plot_rhogas_midplane_profile(model)
+    envos.plot_tools.plot_velocity_midplane_profile(model)
+    envos.plot_tools.plot_Tgas_midplane_profile(model)
+    envos.plot_tools.plot_losvelocity_midplane_map(model)
 
 
     # Calculate the column density along r-direction and z-direction
@@ -110,8 +110,6 @@ def main():
     # `arrays` is str of a variable name, or str list of variable names.
     # model.save_arrays("rhogas", "rhogas.txt")
     model.save_arrays(["rhogas","Tgas","colr","colz"], "data.txt")
-
-    exit()
 
 
 if __name__ == "__main__":
