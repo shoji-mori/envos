@@ -4,8 +4,9 @@ from pathlib import Path
 from dataclasses import dataclass, asdict, replace
 
 # from . import log
-from .log import logger, set_logfile
+from .log import logger, update_logfile
 from envos import gpath
+from envos import log
 
 
 @dataclass
@@ -137,10 +138,11 @@ class Config:
         TSC is a model of a rotating collapsing cloud core
             Terebey, Shu, & Cassen, 1984, ApJ, 286, 529.
     disk : str, default=None
-        Disk model. Options are "exptail" (exponential-tail disk).
+        Disk model. Options are "powerlaw" (power-law disk).
         The detail configuration can be set by `disk_config`
     rot_ccw : bool, default=False
         If True, the rotation is counterclockwise.
+        **Currently not implemented** (setting this has no effect. D8).
     disk_config : dict, default=None
         Dictionary containing additional disk configuration.
         Please refer to the arguments used in `disk_model` for the detail, models.py.
@@ -266,7 +268,7 @@ class Config:
     disk_config: dict = None
 
     # RADMC-3D input
-    nphot: int = 1e6
+    nphot: int = 1_000_000
     f_dg: float = 0.01
     opac: str = "silicate"
     Lstar_Lsun: float = 1.0
@@ -274,7 +276,7 @@ class Config:
     Rstar_Rsun: float = 4.0
     # temp_mode: str = "mctherm"
     molname: str = "c18o"
-    molabun: float = ""
+    molabun: float = None
     iline: int = 3
     scattering_mode_max: int = 0
     mc_scat_maxtauabs: float = 10.0
@@ -343,9 +345,14 @@ class Config:
             gpath.radmc_dir = Path(self.radmc_dir)
 
         if self.logfile is not None:
-            print("set logfile")
             gpath.logfile = Path(self.logfile)
-            set_logfile("on")
+            update_logfile()
+
+        if self.level_stdout is not None:
+            log.set_level("envos", self.level_stdout, target="stream")
+
+        if self.level_logfile is not None:
+            log.set_level("envos", self.level_logfile, target="file")
 
     def replaced(self, **changes):
         return replace(self, **changes)
