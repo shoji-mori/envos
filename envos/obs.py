@@ -423,7 +423,7 @@ class ObsSimulator:
             error_keyword="ERROR",
             log_prefix="    ",
         )
-        with contextlib.redirect_stdout(open(os.devnull, "w")):
+        with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
             fname = f"{dpath_sub}/image.out"
             return rmci.readImage(fname=fname)
 
@@ -505,6 +505,13 @@ class Convolver:
         # relation : standard deviation = 1/(2 sqrt(ln(2))) * FWHM of Gaussian
         # theta_deg : cclw is positive
         self.mode = mode
+        if mode == "null":
+            return
+        if beam_maj_au is None or beam_min_au is None:
+            raise ValueError(
+                "beam size is required for convolution: "
+                "set beam_maj_au and beam_min_au, or use mode='null'"
+            )
         sigma_over_FWHM = 2 * np.sqrt(2 * np.log(2))
         conv_size = [beam_maj_au + 1e-100, beam_min_au + 1e-100]
         if vreso_kms is not None:
@@ -1084,10 +1091,21 @@ class Obreso:
 
     def __post_init__(self, obsdata):
         self.set_dpc_from_obsdata(obsdata)
-        if None in (self.beam_maj_au, self.beam_min_au):
-            self.set_beamsize_au()
-        elif None in (self.beam_maj_deg, self.beam_min_deg):
+        au_pair_complete = (self.beam_maj_au is not None) and (self.beam_min_au is not None)
+        deg_pair_complete = (self.beam_maj_deg is not None) and (self.beam_min_deg is not None)
+        if au_pair_complete:
             self.set_beamsize_deg()
+        elif deg_pair_complete:
+            self.set_beamsize_au()
+        else:
+            raise ValueError(
+                "specify both (beam_maj_au, beam_min_au) or both "
+                "(beam_maj_deg, beam_min_deg); "
+                f"given: beam_maj_au={self.beam_maj_au}, "
+                f"beam_min_au={self.beam_min_au}, "
+                f"beam_maj_deg={self.beam_maj_deg}, "
+                f"beam_min_deg={self.beam_min_deg}"
+            )
 
     def set_beamsize_au(self):
         if self.dpc is None:
@@ -1109,7 +1127,7 @@ class Obreso:
         ):
             self.dpc = obsdata.dpc
         else:
-            print("Something wrong in obsdata")
+            logger.warning("Something wrong in obsdata: dpc could not be determined")
 
 
 @dataclasses.dataclass
@@ -1248,7 +1266,10 @@ class Cube(BaseObsData):
         if norm is not None:
             pv.norm_I(norm)
         if save:
-            pv.save_fitsfile()
+            raise NotImplementedError(
+                "get_pv_map(save=True) is not yet implemented; "
+                "will be wired to save_fits in P2-D"
+            )
         # self.pv_list.append(pv)
         return pv
 
