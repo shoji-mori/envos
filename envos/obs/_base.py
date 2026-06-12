@@ -158,7 +158,7 @@ class BaseObsData:
     def Iu(self, format="latex_inline"):
         s = f"{self.Iunit:{format}}"
         if str(self.Iunit) == "I_max":
-            _s = re.search("\\\mathrm{(.*)}", s).group(1)
+            _s = re.search(r"\\\mathrm{(.*)}", s).group(1)
             return rf"${_s}$"
         else:
             return s

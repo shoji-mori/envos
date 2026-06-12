@@ -36,9 +36,6 @@ jobs:
 
   # -----------------------------------------------------------------------
   # test: Python 3.9 / 3.11 / 3.12 マトリクス
-  # テストディレクトリが未作成(P0-3 完了前)の場合、pytest は exit code 5
-  # を返すため "|| [ $? -eq 5 ]" でワークアラウンドする。
-  # P0-3 がマージされたらこのワークアラウンドを削除すること。
   # -----------------------------------------------------------------------
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -73,10 +70,7 @@ jobs:
           pip install ./radmc3d-2.0/python/radmc3dPy
 
       - name: Run tests
-        # exit code 5 = no tests collected (tests/ ディレクトリ未作成、P0-3 前)
-        # P0-3 がマージされたら "|| [ $? -eq 5 ]" を削除すること。
-        run: |
-          pytest -m "not slow and not radmc" || [ $? -eq 5 ]
+        run: pytest -m "not slow and not radmc"
 
   # -----------------------------------------------------------------------
   # test-full: radmc3d バイナリを gfortran でビルドして完全テスト

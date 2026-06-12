@@ -29,6 +29,9 @@ envos = ["storage/*"]
 version = {attr = "envos.__version__"}
 
 [tool.pytest.ini_options]
+# Make the repo root importable regardless of how pytest is invoked
+# (CI runs `pytest` directly; tests import `tests.golden_helpers`).
+pythonpath = ["."]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "radmc: requires radmc3d binary and real radmc3dPy",
