@@ -35,6 +35,24 @@ G3_ATTRS = ("Mdot", "cs", "t", "CR", "jmid", "Omega")
 G3A_KWARGS = dict(T=10, CR_au=100, Ms_Msun=0.3)
 G3B_KWARGS = dict(Mdot_smpy=4.5e-6, Ms_Msun=0.2, CR_au=200)
 
+# ---------------------------------------------------------------------------
+# G4 spec: UCM + powerlaw disk (P1-9 physics-change: replace-mode disk synthesis)
+# ---------------------------------------------------------------------------
+G4_CONFIG = dict(
+    rau_in=10,
+    rau_out=1000,
+    nr=30,
+    ntheta=20,
+    nphi=1,
+    CR_au=100,
+    Ms_Msun=0.3,
+    T=10,
+    cavangle_deg=45,
+    disk="powerlaw",
+)
+# Same arrays as G1 — rhogas captures the replace-mode disk synthesis.
+G4_ARRAYS = G1_ARRAYS
+
 
 # ---------------------------------------------------------------------------
 # Build functions (shared construction logic)
@@ -112,6 +130,31 @@ def build_g3(kwargs):
     return {attr: float(getattr(pp, attr)) for attr in G3_ATTRS}
 
 
+def build_g4_model(run_dir):
+    """
+    Construct the G4 UCM + powerlaw disk model.
+
+    This uses the replace-mode disk synthesis introduced in P1-9 (D1):
+    ``rho[cond] = disk.rho[cond]`` where ``cond = rho < disk.rho``.
+
+    Parameters
+    ----------
+    run_dir : str or Path
+        A writable directory for Config's run_dir (used by gpath).
+
+    Returns
+    -------
+    CircumstellarModel
+    """
+    from envos.config import Config
+    from envos.model_generator import ModelGenerator
+
+    config = Config(run_dir=str(run_dir), **G4_CONFIG)
+    mg = ModelGenerator(config)
+    mg.calc_kinematic_structure()
+    return mg.get_model()
+
+
 def extract_g1_arrays(model):
     """Extract the G1 array fields from a CircumstellarModel."""
     data = {}
@@ -120,3 +163,7 @@ def extract_g1_arrays(model):
         # rc_ax / tc_ax live directly on the model; rhogas/vr/vt/vp too
         data[name] = np.asarray(arr)
     return data
+
+
+# G4 uses the same array fields as G1.
+extract_g4_arrays = extract_g1_arrays

@@ -22,6 +22,7 @@ class ModelGenerator:
         self.outenv = None
         self.disk = None
         self.model = CircumstellarModel()
+        self.f_dg = None  # C-48: must be set before calc_kinematic_structure
 
         if config is not None:
             self.init_from_config(config)
@@ -114,9 +115,6 @@ class ModelGenerator:
         )
 
     def set_model(self, inenv=None, outenv=None, disk=None):
-        # self.inenv = inenv
-        # self.outenv = outenv
-        # self.disk = disk
         self.set_inenv(inenv)
         self.set_outenv(outenv)
         self.set_disk(disk)
@@ -128,6 +126,20 @@ class ModelGenerator:
         self.model.set_gas_velocity(vr, vt, vp)
 
     def calc_kinematic_structure(self, smoothing_TSC=True):
+        """
+        Compute the kinematic (density + velocity) structure of the model.
+
+        Notes
+        -----
+        When ``smoothing_TSC=True`` the outer-envelope (TSC) contribution is
+        blended smoothly into the inner region via an exponential factor.
+        This blending is applied to the velocity field everywhere (including
+        cavity cells where rho==0), but is *not* applied to the density in
+        zero-density (cavity) cells.  The resulting density/velocity
+        inconsistency in cavity cells is a known limitation; see ISSUES C-49
+        and PLAN §9 D10.  Correcting it would be a ⚠ physics-change affecting
+        all TSC models and is deferred to a later dedicated task.
+        """
         ### Set grid
         if self.grid is None:
             raise Exception("grid is not set.")
@@ -135,6 +147,14 @@ class ModelGenerator:
         ### Set physical parameters
         if self.ppar is None:
             raise Exception("ppar is not set.")
+
+        # C-48: f_dg fallback with warning
+        if self.f_dg is None:
+            logger.warning(
+                "f_dg is not set; using default value 0.01. "
+                "Set self.f_dg (or pass f_dg via Config) to suppress this warning."
+            )
+            self.f_dg = 0.01
 
         ### Set models
         logger.info("Calculating kinematic structure")
@@ -183,8 +203,9 @@ class ModelGenerator:
             logger.info("Setting disk")
             cond = rho < self.disk.rho
             self.disk_region = cond
-            # rho[cond] = self.disk.rho[cond]
-            rho += self.disk.rho
+            # D1: replace-mode — disk wins only where disk.rho > envelope rho.
+            # (The old additive rho += disk.rho over-counted envelope density.)
+            rho[cond] = self.disk.rho[cond]
             vr[cond] = self.disk.vr[cond]
             vt[cond] = self.disk.vt[cond]
             vp[cond] = self.disk.vp[cond]
@@ -255,7 +276,7 @@ class ModelGenerator:
             }
             if self.config.disk_config is not None:
                 config.update(self.config.disk_config)
-            print(config)
+            logger.info("disk config: %s", config)
             self.disk = PowerlawDisk(self.grid, self.ppar.Ms, self.ppar.CR, **config)
         else:
             raise Exception("Unknown disk type")
@@ -291,5 +312,4 @@ def read_model(path):
     if ".pkl" in path:
         return tools.read_pickle(path)
     else:
-        raise Exception("Still constructing...Sorry")
-        return CircumstellarModel(filepath=path)
+        raise NotImplementedError("only .pkl is supported")

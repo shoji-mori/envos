@@ -30,7 +30,9 @@ from tests.golden_helpers import (
     build_g1_model,
     build_g2_model,
     build_g3,
+    build_g4_model,
     extract_g1_arrays,
+    extract_g4_arrays,
 )
 
 
@@ -123,6 +125,35 @@ def test_g3b_scalars_match_golden():
 # ---------------------------------------------------------------------------
 # G2: UCM+TSC model array regression  (@slow — loads tscsol.pkl)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# G4: UCM + powerlaw disk array regression  (P1-9 physics-change: replace-mode)
+# ---------------------------------------------------------------------------
+
+def test_g4_arrays_match_golden(tmp_path):
+    """
+    UCM + powerlaw disk model (G4) arrays must match stored golden values to rtol=1e-10.
+
+    This golden was generated with the replace-mode disk synthesis introduced
+    in P1-9 (D1): ``rho[cond] = disk.rho[cond]`` where ``cond = rho < disk.rho``.
+    The previous additive method (``rho += disk.rho``) produced up to ~50% higher
+    density in disk-dominated cells; that difference is the physics change recorded
+    in this PR.
+
+    Covers: rhogas, vr, vt, vp, rc_ax, tc_ax.
+    """
+    golden = dict(np.load(GOLDEN_DIR / "g4_ucm_disk.npz"))
+    model = build_g4_model(tmp_path)
+    result = extract_g4_arrays(model)
+
+    for name in golden:
+        np.testing.assert_allclose(
+            result[name],
+            golden[name],
+            rtol=1e-10,
+            err_msg=f"G4 mismatch in array '{name}'",
+        )
+
 
 @pytest.mark.slow
 def test_g2_arrays_match_golden(tmp_path):
