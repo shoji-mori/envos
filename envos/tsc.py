@@ -89,7 +89,7 @@ class TscSolver:
             method="BDF",
         )
         rho_eq = np.exp(sol.y[0]) * ksi ** (-2)
-        M_eq = integrate.cumtrapz(np.exp(sol.y[0]), ksi, initial=0) + ksi[0]
+        M_eq = integrate.cumulative_trapezoid(np.exp(sol.y[0]), ksi, initial=0) + ksi[0]
         ksi_eq = ksi
         return ksi_eq, rho_eq, M_eq
 
@@ -342,9 +342,9 @@ class TscSolver:
         )
         self.al_M = solM.y[0]
         self.V_M = solM.y[1]
-        self.Ms = -integrate.simps(
+        self.Ms = -integrate.simpson(
             self.x[self.x < 1] ** 2 * (self.al_M[self.x < 1] - 1 / 2),
-            self.x[self.x < 1],
+            x=self.x[self.x < 1],
         )
 
     # def save_table(self, filename="tscsol.dat", path=None):

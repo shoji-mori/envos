@@ -1150,7 +1150,7 @@ class Cube(BaseObsData):
     obreso: Obreso = None
     sobs_info: dict = None
     Iunit: str = u.Jy / u.pix  # r"Jy pixel$^{-1}$"
-    refpos: RefPos = RefPos()  # list[float, float, float] = [0,0,0]
+    refpos: RefPos = dataclasses.field(default_factory=RefPos)  # list[float, float, float] = [0,0,0]
     radec_deg: dataclasses.InitVar[tuple] = None
     radecSIN_deg: dataclasses.InitVar[tuple] = None
     freq0: dataclasses.InitVar[float] = None
@@ -1189,7 +1189,7 @@ class Cube(BaseObsData):
                 _Ipp = np.sum(self.Ippv, axis=-1) * (self.vkms[1] - self.vkms[0])
 
             elif method == "integrate":
-                _Ipp = integrate.simps(self.Ippv, self.vkms, axis=-1)
+                _Ipp = integrate.simpson(self.Ippv, x=self.vkms, axis=-1)
 
         if normalize == "peak":
             _Ipp /= np.max(_Ipp)
@@ -1265,7 +1265,7 @@ class Image(BaseObsData):
     data: np.ndarray
     xau: np.ndarray = None
     yau: np.ndarray = None
-    refpos: RefPos = RefPos()
+    refpos: RefPos = dataclasses.field(default_factory=RefPos)
     dpc: float = None
     obreso: Obreso = None
     sobs_info: dict = None
@@ -1313,7 +1313,7 @@ class PVmap(BaseObsData):
     Ipv: np.ndarray
     xau: np.ndarray = None
     vkms: np.ndarray = None
-    refpos: RefPos = RefPos()
+    refpos: RefPos = dataclasses.field(default_factory=RefPos)
     dpc: float = None
     " Information for how to have made this PV "
     pangle_deg: float = None

@@ -402,7 +402,7 @@ def vertical_integral(value_rt, R_rt, z_rt, R_ax, z_ax, log=False):
         )
     else:
         ret = interpolate.griddata(points, value_rt.ravel(), npoints, method="linear")
-    s = np.array([integrate.simps(r, z_ax) for r in np.nan_to_num(ret)])
+    s = np.array([integrate.simpson(r, x=z_ax) for r in np.nan_to_num(ret)])
     return s
 
 
