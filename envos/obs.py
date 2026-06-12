@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import shutil
 import glob
 import numpy as np
@@ -110,13 +109,6 @@ class ObsSimulator:
             conf = self.config
         radmc = RadmcController(config=conf)
         radmc.clean_radmc_dir()
-        radmc.set_model(model)
-        radmc.set_temperature(model.Tgas)
-        radmc.set_lineobs_inpfiles()
-
-    def set_radmc_input(self, model, conf):
-        radmc = RadmcController(**conf.__dict__)
-        radmc.clean_radmc_dirs()
         radmc.set_model(model)
         radmc.set_temperature(model.Tgas)
         radmc.set_lineobs_inpfiles()
@@ -239,49 +231,6 @@ class ObsSimulator:
 
         return odat
 
-    def observe_line_profile(
-        self, zoomau=None, iline=None, molname=None, incl=None, phi=None, posang=None
-    ):
-        """
-        Execute radmc3d to obtain line profile.
-
-        *** Not tested yet. ***
-
-        """
-        """
-        iline = iline or self.iline
-        molname = molname or self.molname
-        incl = incl or self.incl
-        phi = phi or self.phi
-        posang = posang or self.posang
-
-        cmd = gen_radmc_cmd(
-            mode="image",
-            dpc=self.dpc,
-            incl=incl,
-            phi=phi,
-            posang=posang,
-            npixx=self.npixx,
-            npixy=self.npixx,
-            lam=lam,
-            zoomau=zoomau,
-            option="noscat nostar",
-        )
-
-        tools.shell(cmd, cwd=self.radmc_dir, error_keyword="ERROR", log_prefix="    ")
-
-        self.data_line = rmci.readImage(fname=f"{self.radmc_dir}/image.out")
-        self.data_line.dpc = self.dpc
-        self.data_line.freq0 = nc.c / ( lam_mic/1e4 )
-        odat = read_radmcdata(self.data_line)
-
-        if self.conv:
-            odat.data = self.convolver(odat.data)
-            odat.set_obs_resolution(**self.convolve_config)
-
-        return odat
-        """
-
     def observe_line(
         self, iline=None, molname=None, incl=None, phi=None, posang=None, obsdust=False
     ):
@@ -381,10 +330,6 @@ class ObsSimulator:
             odat.set_obs_resolution(**self.convolve_config)
 
         return odat
-
-    @staticmethod
-    def find_proper_nthread(n_thr, n_div):
-        return max([i for i in range(n_thr, 0, -1) if n_div % i == 0])
 
     @staticmethod
     def _divide_nlam_by_threads(nlam, nthr):
@@ -623,15 +568,6 @@ class BaseObsData:
 
     def copy(self):
         return copy.deepcopy(self)
-
-    def convolve_image(self):  ## !! need to be changed
-        conv = Convolver(
-            (self.dx, self.dy),
-            beam_maj_au=self.obreso.beam_maj_au,
-            beam_min_au=self.obreso.beam_min_au,
-            beam_pa_deg=self.obreso.beam_pa_deg,
-        )
-        self.data = conv(self.data)
 
     """
     Get and set I and axes
@@ -992,29 +928,6 @@ class BaseObsData:
         elif ax == "v":
             self.vkms -= d
 
-    #     """
-    #     def move_center(self, xyau=None, radecdeg=None, v0_kms=None):
-    #         if xyau is not None:
-    #             self.move_position(xyau[0], "x", "au")
-    #             self.move_position(xyau[1], "y", "au")
-    #             self.refpos.dec0 += xyau[1] * nc.au/nc.pc/self.dpc * 180 / np.pi
-    #             self.refpos.ra0 -= xyau[0] * nc.au/nc.pc/self.dpc/np.cos(self.refpos.dec0) * 180 / np.pi
-    #
-    #         ""
-    #         elif radecdeg is not None:
-    #             self.dec0 -= np.deg2rad( decdeg[0] )
-    #             self.rad0 -= np.deg2rad( decdeg[1] )
-    #             self.dec -= np.deg2rad( decdeg[0] )
-    #             self.rad -= np.deg2rad( decdeg[1] )
-    #             self.calc_radec_to_stdcoord()
-    #         ""
-    #
-    #         if v0_kms is not None:
-    #             self.move_position(v0_kms, "v", "kms")
-    #             #self.vkms -= v0_kms
-    #             # self.freq0 -= *** : freq is not changed here, for now
-    #     """
-
     def set_refpoint(self, ra0, dec0):
         "1. Change the reference point (ra0, dec0)"
         self.refpos.ra0 = ra0
@@ -1274,17 +1187,6 @@ class Cube(BaseObsData):
         return pv
 
 
-#    def position_line(self, xau, PA_deg, poffset_au=0):
-#        PA_rad = (PA_deg + 90) * nc.deg2rad
-#        pos_x = xau * np.cos(PA_rad) - poffset_au * np.sin(PA_rad)
-#        pos_y = xau * np.sin(PA_rad) + poffset_au * np.sin(PA_rad)
-#        return np.stack([pos_x, pos_y], axis=-1)
-
-"""
-    New standalone function
-"""
-
-
 @dataclasses.dataclass
 class Image(BaseObsData):
     data: np.ndarray
@@ -1458,16 +1360,13 @@ def read_obsdata(path, mode=None):
         return joblib.load(path)
 
     elif (".fits" in path) or (mode == "fits"):
-        # logger.error("Still constructing...Sorry...")
-        # sys.exit(1)
-        print("do fits")
-        return None
+        raise NotImplementedError(
+            "FITS reading via read_obsdata is not implemented; "
+            "use read_cube_fits / read_image_fits / read_pv_fits instead"
+        )
 
     else:
-        logger.error("Still constructing...Sorry...")
-        sys.exit(1)
-        # raise Exception("Still constructing...Sorry")
-        return Cube(filepath=path)
+        raise ValueError(f"cannot infer file type: {path}")
 
 
 def read_radmcdata(data):
@@ -1798,13 +1697,3 @@ def minmaxargs(array, lim):
     return imin, imax + 1
 
 
-if __name__ == "__main__":
-    obj = read_fits(
-        "/home/smori/my-envos/ShareMori/260G_spw1_C3H2_v.fits",
-        "cube",
-        dpc=140,
-        unit1="deg",
-        unit2="deg",
-        unit3="m/s",
-    )
-    print(obj)
