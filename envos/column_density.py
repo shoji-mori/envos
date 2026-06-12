@@ -1,7 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy import interpolate, integrate
-import envos
 from . import log
 
 def calc_column_density(model, direction, double_interp=True):
@@ -58,6 +56,7 @@ def calc_column_density(model, direction, double_interp=True):
                 bounds_error=False,
                 fill_value=None,
             )
+
             zlim = np.max(model.z) * 1.1
         return v_column_density_z(model.R, model.z, model, rho_interp, zlim).astype(
             float
@@ -67,6 +66,8 @@ def calc_column_density(model, direction, double_interp=True):
 
 
 def test_column_density(model):
+    import matplotlib.pyplot as plt
+
     test_colr = 0
     test_colt = 0
     test_colz = 1
@@ -112,7 +113,9 @@ def test_column_density(model):
 
 def column_density_z(R, z, model, interp_func, zlim):
     _R = R
-    _z_ax = np.arange(z, zlim, 0.1 * z)
+    # C-55 fix: guard against step=0 when z=0
+    step = max(0.1 * z, zlim * 1e-4)
+    _z_ax = np.arange(z, zlim, step)
     r = np.sqrt(_R**2 + _z_ax**2)
     t = np.arctan2(_R, _z_ax)
     points = np.stack([r, t], axis=-1)
@@ -124,6 +127,7 @@ def column_density_z(R, z, model, interp_func, zlim):
 v_column_density_z = np.frompyfunc(column_density_z, 5, 1)
 
 if __name__ == "__main__":
+    import envos
     config = envos.Config(
         run_dir="./run",
         n_thread=10,
