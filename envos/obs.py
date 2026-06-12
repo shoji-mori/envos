@@ -475,6 +475,9 @@ class Convolver:
             )
 
     def __call__(self, image):
+        if self.mode == "null":
+            return image
+
         if len(image.shape) == 2 or image.shape[2] == 1:
             Kernel = self.Kernel_xy2d
             logger.info("Convolving image with 2d-Kernael")
@@ -495,9 +498,6 @@ class Convolver:
             # return aconv.convolve_fft(image, Kernel, allow_huge=True, nan_treatment='interpolate', normalize_kernel=True, fftn=fft, ifftn=ifft)
         elif self.mode == "scipy":
             return signal.convolve(image, Kernel, mode="same", method="auto")
-
-        elif self.mode == "null":
-            return image
         else:
             raise Exception("Unknown convolve mode: ", self.mode)
 
