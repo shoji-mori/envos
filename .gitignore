@@ -28,3 +28,6 @@ run/
 envos.egg-info/
 build/
 dist/
+
+# Allow GitHub Actions workflows (the ".*" rule above would hide .github/)
+!.github/
