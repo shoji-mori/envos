@@ -1,0 +1,8 @@
+[lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[lint.per-file-ignores]
+# P1-2 で修正予定: re が import されていないため F821 が発生
+"envos/tools.py" = ["F821"]
+# P1-17 で修正予定: variable_name が未定義で F821 が発生
+"envos/plot_tools/physical_structure.py" = ["F821"]
