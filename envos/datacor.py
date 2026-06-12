@@ -23,10 +23,12 @@ def calc_datacor(
     axes_data = data1.get_axes()
     axes_newgrid = []
     for _ax_data, _range, _ax_user in itertools.zip_longest(axes_data, ranges, axes):
+        # C-56 fix: when _range is None (ranges shorter than axes), use full axis range
         if _range is None:
-            continue
-        cond = (_range[0] < _ax_data) & (_ax_data < _range[1])
-        newax = _ax_data[cond] if _ax_user is None else _ax_user
+            newax = _ax_data if _ax_user is None else _ax_user
+        else:
+            cond = (_range[0] < _ax_data) & (_ax_data < _range[1])
+            newax = _ax_data[cond] if _ax_user is None else _ax_user
         axes_newgrid.append(newax)
 
     grid = np.meshgrid(*axes_newgrid, indexing="ij")
@@ -43,9 +45,12 @@ def calc_datacor(
     )
 
     ## Preprocess
+    # C-56 fix: compute both factors before applying them (symmetric preprocessing)
     if preprocess_func is not None:
-        im1 *= preprocess_func(im1, im2, axes_newgrid)
-        im2 *= preprocess_func(im1, im2, axes_newgrid)
+        fac1 = preprocess_func(im1, im2, axes_newgrid)
+        fac2 = preprocess_func(im2, im1, axes_newgrid)
+        im1 *= fac1
+        im2 *= fac2
 
     ## Normalization
     if norm1:
@@ -54,7 +59,7 @@ def calc_datacor(
     if norm2:
         im2 /= np.max(im2)
 
-    ## Threshold 
+    ## Threshold
     if threshold1 is not None:
         im1 = np.where(im1 > threshold1, im1, floor)
 
