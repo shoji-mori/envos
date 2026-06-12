@@ -265,8 +265,7 @@ def plot_velocity_midplane_profile(
     )
 
     if save:
-        name = save_name if save_name is not None else "velocity_profile"
-        pfun.savefig(name + "." + figext)
+        pfun.savefig("velocity_profile" + "." + figext)
 
     return
 
