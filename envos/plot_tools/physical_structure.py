@@ -125,7 +125,7 @@ def plot_midplane_radial_profile(
         var_mid = model.get_midplane_profile(var)
     else:
         var = getattr(model, variable_name)
-        var_mid = var[:,model.get_argmid,:]
+        var_mid = var[:, model.get_argmid(), :]
 
     plt.plot(model.rc_ax/nc.au, var_mid, **kwargs)
     for line in lines:
@@ -265,8 +265,7 @@ def plot_velocity_midplane_profile(
     )
 
     if save:
-        save_name = "velocity_profile"
-        name = variable_name if save_name is None else save_name
+        name = save_name if save_name is not None else "velocity_profile"
         pfun.savefig(name + "." + figext)
 
     return
@@ -318,11 +317,11 @@ def plot_angular_velocity_midplane_profile(
     loglog=True,
     **kwargs
 ):
-    Omega = model.vp / model.R,
+    Omega = model.vp / model.R
     plot_midplane_radial_profile(
         model,
-        Omega,
-        "Omega_prof",
+        variable_name=Omega,
+        save_name="Omega_prof",
         xlb=xlb,
         ylb=ylb,
         xlim=xlim,
@@ -346,7 +345,7 @@ def plot_losvelocity_midplane_map(model, rlim=400, dvkms=0.2, mode="average", st
 
     rr, tt, pp = np.meshgrid(rax, tax, pax, indexing="ij")
     R, z = rr * [np.sin(tt), np.cos(tt)]
-    x, y = R * np.sin(tt) * [np.cos(pp), np.sin(pp)]
+    x, y = R * np.array([np.cos(pp), np.sin(pp)])
     cav = np.where(model.rhogas != 0, 1, 0)
     #vls = (x / R * model.vp + y / R * model.vR)*cav
     #vx = (- y / R * model.vp + x / R * model.vR)*cav
