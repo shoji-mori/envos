@@ -51,7 +51,7 @@ def gen_radmc_cmd(
         freq = f"lambda {lam}"
     elif iline is not None:
         freq = f"iline {iline} widthkms {vhw_kms:g} linenlam {nlam:d}"
-        freq += f" vkms {vc_kms:g}" if vc_kms else ""
+        freq += f" vkms {vc_kms:g}" if vc_kms is not None else ""
     cmd = " ".join(["radmc3d", f"{mode}", position, camera, freq, option])
     return cmd
 
@@ -206,9 +206,9 @@ class ObsSimulator:
         if lam_mic is None and freq is not None:
             lam_mic = nc.c / freq * 1e4
 
-        incl = incl or self.incl
-        phi = phi or self.phi
-        posang = phi or self.posang
+        incl = incl if incl is not None else self.incl
+        phi = phi if phi is not None else self.phi
+        posang = posang if posang is not None else self.posang
 
         logger.info(f"Observing continum with wavelength of {lam_mic} micron")
         zoomau = np.concatenate([self.zoomau_x, self.zoomau_y])
@@ -220,7 +220,7 @@ class ObsSimulator:
             phi=phi,
             posang=posang,
             npixx=self.npixx,
-            npixy=self.npixx,
+            npixy=self.npixy,
             lam=lam_mic,
             zoomau=zoomau,
             option="noscat" + ("" if star else " nostar"),
@@ -285,11 +285,11 @@ class ObsSimulator:
     def observe_line(
         self, iline=None, molname=None, incl=None, phi=None, posang=None, obsdust=False
     ):
-        iline = iline or self.iline
-        molname = molname or self.molname
-        incl = incl or self.incl
-        phi = phi or self.phi
-        posang = posang or self.posang
+        iline = iline if iline is not None else self.iline
+        molname = molname if molname is not None else self.molname
+        incl = incl if incl is not None else self.incl
+        phi = phi if phi is not None else self.phi
+        posang = posang if posang is not None else self.posang
 
         logger.info(f"Observing line with {molname}")
         self.nlam = int(round(self.vfw_kms / self.dv_kms))  # + 1
@@ -309,7 +309,7 @@ class ObsSimulator:
             "npixx": self.npixx,
             "npixy": self.npixy,
             "zoomau": [*self.zoomau_x, *self.zoomau_y],
-            "iline": self.iline,
+            "iline": iline,
             "option": "noscat nostar "
             + self.lineobs_option
             + " ",  # + (" doppcatch " if ,
