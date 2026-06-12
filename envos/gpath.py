@@ -33,8 +33,8 @@ def set_storagedir(path):
 
 def set_radmcdir(path):
     """ Set the radmc directory to global variable, radmc_dir. """
-    global run_dir
-    run_dir = Path(path)
+    global radmc_dir
+    radmc_dir = Path(path)
 
 
 def set_logfile(path):
