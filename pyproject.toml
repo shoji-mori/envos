@@ -24,3 +24,10 @@ packages = ["envos", "envos.plot_tools"]
 
 [tool.setuptools.dynamic]
 version = {attr = "envos.__version__"}
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "radmc: requires radmc3d binary and real radmc3dPy",
+]
+testpaths = ["tests"]
