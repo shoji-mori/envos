@@ -136,7 +136,7 @@ def test_make_userdefined_model_pipeline(tmp_path):
     mg.set_gas_density(rho=rho)
     mg.set_gas_velocity(vr=vr, vt=vt, vp=vp)
 
-    # Explicitly set dust density (mirrors P1-19 fix for make_userdefined_model.py)
+    # Explicitly set dust density before thermal structure (mirrors P1-19 fix)
     mg.model.set_dust_density(f_dg=config.f_dg)
 
     model = mg.get_model()

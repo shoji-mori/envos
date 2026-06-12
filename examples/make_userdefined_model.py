@@ -65,6 +65,7 @@ def main():
     vp = np.sqrt(envos.nc.G * config.Ms_Msun * envos.nc.Msun / rr)
     mg.set_gas_density(rho=rho)
     mg.set_gas_velocity(vr=vr, vt=vt, vp=vp)
+    mg.model.set_dust_density(f_dg=config.f_dg)
 
     # Calculate temperature structure.
     mg.calc_thermal_structure()
@@ -94,7 +95,6 @@ def main():
     # Synthetic observations by ObsSimulator
     osim = envos.ObsSimulator(config)
     osim.set_model(model)
-    mg.model.set_dust_density(f_dg=config.f_dg)
     odat = osim.observe_line()
 
     envos.plot_tools.plot_mom0_map(odat.get_mom0_map())
