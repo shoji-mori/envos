@@ -247,9 +247,9 @@ def plot_velocity_midplane_profile(
         vtmid = model.get_midplane_profile("vt", vabs=True)/1e5
         vpmid = model.get_midplane_profile("vp")/1e5
     else:
-        vrmid = model.vr[:,index_mid,:]/1e5
-        vtmid = model.vt[:,index_mid,:]/1e5
-        vpmid = model.vp[:,index_mid,:]/1e5
+        vrmid = model.vr[:, index_mid, 0] / 1e5
+        vtmid = model.vt[:, index_mid, 0] / 1e5
+        vpmid = model.vp[:, index_mid, 0] / 1e5
     rau = model.rc_ax / nc.au
     plt.plot(rau, -vrmid * gm, label=r"$- v_r$", ls=cycle_ls[icycle])
     plt.plot(rau, np.abs(vtmid) * gm, label=r"$v_{\theta}$", ls=cycle_ls[icycle+1])

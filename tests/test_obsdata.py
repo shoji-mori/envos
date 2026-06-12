@@ -363,3 +363,60 @@ class TestResetPositiveAxesAllTypes:
         pv = PVmap(Ipv=Ipv.copy(), xau=xau_desc.copy(), vkms=vkms.copy())
         assert pv.xau[0] < pv.xau[-1]
         np.testing.assert_array_equal(pv.get_I(), Ipv[::-1, :])
+
+
+# ===========================================================================
+# 追補-79: PVmap.__post_init__ argument order matches InitVar declaration order
+# ===========================================================================
+
+class TestPVmapInitVarOrder:
+    """追補-79: PVmap(freq0=...) must not corrupt xau; xrad= must convert correctly."""
+
+    def _make_pv(self, nx=5, nv=6):
+        xau = np.linspace(-50, 50, nx)
+        vkms = np.linspace(-3, 3, nv)
+        Ipv = np.ones((nx, nv))
+        return Ipv, xau, vkms
+
+    def test_freq0_does_not_corrupt_xau(self):
+        """追補-79(a): Passing freq0=2.3e11 must not overwrite xau."""
+        Ipv, xau, vkms = self._make_pv()
+        pv = PVmap(Ipv=Ipv, xau=xau.copy(), vkms=vkms, freq0=2.3e11)
+        np.testing.assert_array_equal(
+            pv.xau, xau,
+            err_msg=(
+                "xau was corrupted after PVmap(freq0=2.3e11). "
+                "This indicates the InitVar argument order bug (追補-79) is not fixed."
+            ),
+        )
+
+    def test_freq0_stored_in_refpos(self):
+        """追補-79(b): Passing freq0=2.3e11 must be stored in refpos.freq0."""
+        Ipv, xau, vkms = self._make_pv()
+        pv = PVmap(Ipv=Ipv, xau=xau.copy(), vkms=vkms, freq0=2.3e11)
+        assert pv.refpos.freq0 == 2.3e11, (
+            f"refpos.freq0={pv.refpos.freq0!r}, expected 2.3e11. "
+            "freq0 may have been interpreted as xrad (追補-79)."
+        )
+
+    def test_xrad_converts_to_xau(self):
+        """追補-79: xrad=<angle_rad> must be converted to xau via dpc."""
+        from envos import nconst as nc
+        Ipv, _, vkms = self._make_pv()
+        dpc = 140.0
+        xrad = np.linspace(1e-6, 1e-4, 5)  # small angles in radians
+        expected_xau = xrad * dpc * nc.pc / nc.au
+        pv = PVmap(Ipv=Ipv, vkms=vkms, dpc=dpc, xrad=xrad)
+        np.testing.assert_allclose(
+            pv.xau, expected_xau, rtol=1e-10,
+            err_msg="xrad -> xau conversion gave unexpected result.",
+        )
+
+    def test_no_freq0_refpos_unchanged(self):
+        """Without freq0, refpos.freq0 stays at default (0)."""
+        Ipv, xau, vkms = self._make_pv()
+        pv = PVmap(Ipv=Ipv, xau=xau.copy(), vkms=vkms)
+        assert pv.refpos.freq0 == 0, (
+            f"refpos.freq0 should be 0 (default) when freq0 not given, "
+            f"got {pv.refpos.freq0!r}."
+        )
