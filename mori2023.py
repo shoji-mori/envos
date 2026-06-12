@@ -353,10 +353,12 @@ def synobs(
         if save_mg:
             mg.save()
     else:
-        print("Skip model calculation")
+        raise FileNotFoundError(
+            f"mg.pkl not found at {envos.gpath.run_dir / 'mg.pkl'} and calc_model=False"
+        )
 
 
-    """    
+    """
     plot model structure
     """
     if plot_model_structure:
@@ -393,10 +395,12 @@ def synobs(
 
 
     """
-    plot PV diagrams 
+    plot PV diagrams
     """
-    if plot_pv:
+    if plot_pv or plot_pv_for_mass_estimate or plot_pv_loglog:
         pv = cube.get_pv_map(pangle_deg=conf.posang - 90 + pa_pv)
+
+    if plot_pv:
         envos.plot_tools.plot_pvdiagram(
             pv,
             mass_estimate=False,

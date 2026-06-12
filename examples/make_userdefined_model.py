@@ -65,6 +65,7 @@ def main():
     vp = np.sqrt(envos.nc.G * config.Ms_Msun * envos.nc.Msun / rr)
     mg.set_gas_density(rho=rho)
     mg.set_gas_velocity(vr=vr, vt=vt, vp=vp)
+    mg.model.set_dust_density(f_dg=config.f_dg)
 
     # Calculate temperature structure.
     mg.calc_thermal_structure()
@@ -84,23 +85,19 @@ def main():
     print(model)
 
     # Draw useful figures...
-    envos.plot_tools.plot_midplane_density_profile(model)
-    envos.plot_tools.plot_midplane_velocity_profile(model)
-    envos.plot_tools.plot_midplane_temperature_profile(model)
-    envos.plot_tools.plot_midplane_velocity_map(model)
-    envos.plot_tools.plot_density_map(model, streams=True)
-    envos.plot_tools.plot_temperature_map(model, streams=True)
+    envos.plot_tools.plot_rhogas_midplane_profile(model)
+    envos.plot_tools.plot_velocity_midplane_profile(model)
+    envos.plot_tools.plot_Tgas_midplane_profile(model)
+    envos.plot_tools.plot_losvelocity_midplane_map(model)
+    envos.plot_tools.plot_rhogas_map(model, streams=True)
+    envos.plot_tools.plot_Tgas_map(model, streams=True)
 
     # Synthetic observations by ObsSimulator
     osim = envos.ObsSimulator(config)
     osim.set_model(model)
     odat = osim.observe_line()
 
-    envos.plot_tools.plot_mom0_map(
-        odat,
-        pangle_deg=None,
-        poffset_au=None,
-    )
+    envos.plot_tools.plot_mom0_map(odat.get_mom0_map())
 
 
 if __name__ == "__main__":
