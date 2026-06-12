@@ -124,25 +124,15 @@ def test_physical_parameters_Mdot_Ms_jmid():
 
 
 # ---------------------------------------------------------------------------
-# (f) from envos import *  -- known bug B-13, expected to fail with
-#     AttributeError until P1-4 is implemented.
+# (f) from envos import *  -- B-13 fixed in P1-4
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AttributeError,
-    reason=(
-        "Known bug B-13: __all__ contains 'read_mg' which does not exist in "
-        "envos.__init__. Fix tracked in PLAN.md P1-4. "
-        "This xfail will be removed when P1-4 is merged."
-    ),
-)
 def test_from_envos_import_star():
     """
-    'from envos import *' currently raises AttributeError due to B-13.
+    'from envos import *' must succeed.
 
-    We run the import inside exec() so the module-level wildcard import
-    can be captured as a runtime error rather than a collection-time error.
+    B-13 fix (P1-4): removed 'read_mg' from __all__ and added
+    'from . import column_density' so all listed names resolve.
     """
     # exec isolates the wildcard import so pytest can catch the exception
     exec("from envos import *", {})

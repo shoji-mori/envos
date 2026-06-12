@@ -6,12 +6,12 @@ from . import tools
 from . import plot_tools
 from . import log
 from . import datacor
+from . import column_density
 
 __all__ = [
     "Config",
     "ModelGenerator",
     "read_model",
-    "read_mg",
     "ObsSimulator",
     "read_obsdata",
     "nc",
