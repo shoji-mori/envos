@@ -566,11 +566,14 @@ class BaseObsData:
     def __str__(self):
         return tools.dataclass_str(self)
 
-    def _reset_positive_axes(self, img, axs):
-        for i, ax in enumerate(axs):
-            if (len(ax) >= 2) and (ax[1] < ax[0]):
-                axs[i] = ax[::-1]
-                img = np.flip(img, i)
+    def _reset_positive_axes(self):
+        for i, name in enumerate(self._axnames):
+            ax = getattr(self, name)
+            if ax is None or len(ax) < 2:
+                continue
+            if ax[1] < ax[0]:
+                setattr(self, name, ax[::-1])
+                self.set_I(np.flip(self.get_I(), axis=i))
 
     def _check_data_shape(self):
         lens = tuple([len(ax) for ax in self.get_axes()])
@@ -802,7 +805,7 @@ class BaseObsData:
             self.Iunit = u.K
         else:
             raise AttributeError(
-                "Failed to convert the data into brightness temperature: Iunit={self.Iunit} and freq0={self.repos.freq0}"
+                f"Failed to convert the data into brightness temperature: Iunit={self.Iunit} and freq0={self.refpos.freq0}"
             )
 
     def trim(self, xlim=None, ylim=None, vlim=None):
@@ -1008,7 +1011,7 @@ class BaseObsData:
     def set_refpoint(self, ra0, dec0):
         "1. Change the reference point (ra0, dec0)"
         self.refpos.ra0 = ra0
-        self.refpos.dec = dec0
+        self.refpos.dec0 = dec0
 
     def move_center(self, xy_au=None, to_Imax=False, **kwargs):
         "2. Change the origin of the coordinate but not change the reference point"
@@ -1169,7 +1172,7 @@ class Cube(BaseObsData):
             self.refpos.freq0 = freq0
         # self._complement_coord()
         self._check_data_shape()
-        self._reset_positive_axes(self.Ippv, [self.xau, self.yau, self.vkms])
+        self._reset_positive_axes()
 
     def get_mom0_map(self, normalize="peak", method="sum", vlim=None):
         if self.Ippv.shape[2] == 1:
@@ -1280,21 +1283,17 @@ class Image(BaseObsData):
     _Iname = "data"
     _axnames = ["xau", "yau"]
 
-    def __post_init__(self, radec_deg, radecSIN_deg, freq0=None, vkms0=None):
+    def __post_init__(self, radec_deg, radecSIN_deg, freq0):
         if radec_deg:
             self.set_coord_from_radec(*radec_deg)
         elif radecSIN_deg:
             self.set_coord_from_radecSIN(*radecSIN_deg)
 
-        # if vkms0 is not None, get freq0 and put it into self.refpos
-        # if freq0 is not None, just put it into self.refpos
-        if vkms0:
-            self.refpos.freq0 = tools.vkms_to_freq(vkms0)
         if freq0:
             self.refpos.freq0 = freq0
 
         self._check_data_shape()
-        self._reset_positive_axes(self.data, [self.xau, self.yau])
+        self._reset_positive_axes()
 
     #    def offset_center_to_maximum(self):
     #        xc, yc = self.get_peak_position(interp=False)
@@ -1337,7 +1336,7 @@ class PVmap(BaseObsData):
         if freq0:
             self.refpos.freq0 = freq0
         self._check_data_shape()
-        self._reset_positive_axes(self.Ipv, [self.xau, self.vkms])
+        self._reset_positive_axes()
 
 
 #########################################################
@@ -1771,8 +1770,10 @@ def dec_to_deg(deg, arcmin, arcsec):
 
 
 def minmaxargs(array, lim):
-    # print(array, lim)
-    imin, imax = np.take(np.argwhere((array > lim[0]) & (array < lim[-1])), (0, -1))
+    indices = np.argwhere((array >= lim[0]) & (array <= lim[-1]))
+    if len(indices) == 0:
+        raise ValueError(f"no points within {lim}")
+    imin, imax = np.take(indices, (0, -1))
     return imin, imax + 1
 
 
