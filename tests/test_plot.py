@@ -183,6 +183,30 @@ class TestPlotVelocityMidplaneProfile:
         finally:
             pfun.set_fig_dir(fig_dir_orig)
 
+    def test_midplane_false_plots_one_line_per_component(self, g1_model):
+        """追補-78: midplane_average=False must plot exactly 3 lines (one per velocity
+        component), not nr lines caused by (nr, nphi) * (nr,) broadcasting."""
+        fig, ax = plt.subplots()
+        try:
+            pphys.plot_velocity_midplane_profile(
+                g1_model, midplane_average=False, save=False
+            )
+            ax = plt.gca()
+            # Expect exactly 3 lines: -vr, |vt|, |vp|
+            assert len(ax.lines) == 3, (
+                f"Expected 3 lines (one per velocity component), got {len(ax.lines)}. "
+                "The phi-axis squeeze fix (追補-78) may be missing."
+            )
+            # Each line must have the same length as the radial axis
+            nr = len(g1_model.rc_ax)
+            for line in ax.lines:
+                xdata = line.get_xdata()
+                assert len(xdata) == nr, (
+                    f"Line has {len(xdata)} points but nr={nr}."
+                )
+        finally:
+            _close_fig()
+
 
 class TestPlotLosvelocityMidplaneMap:
     """P1-17: plot_losvelocity_midplane_map runs under Agg (coordinate fix B-33)."""
