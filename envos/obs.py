@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import shutil
 import glob
 import numpy as np
@@ -51,7 +50,7 @@ def gen_radmc_cmd(
         freq = f"lambda {lam}"
     elif iline is not None:
         freq = f"iline {iline} widthkms {vhw_kms:g} linenlam {nlam:d}"
-        freq += f" vkms {vc_kms:g}" if vc_kms else ""
+        freq += f" vkms {vc_kms:g}" if vc_kms is not None else ""
     cmd = " ".join(["radmc3d", f"{mode}", position, camera, freq, option])
     return cmd
 
@@ -110,13 +109,6 @@ class ObsSimulator:
             conf = self.config
         radmc = RadmcController(config=conf)
         radmc.clean_radmc_dir()
-        radmc.set_model(model)
-        radmc.set_temperature(model.Tgas)
-        radmc.set_lineobs_inpfiles()
-
-    def set_radmc_input(self, model, conf):
-        radmc = RadmcController(**conf.__dict__)
-        radmc.clean_radmc_dirs()
         radmc.set_model(model)
         radmc.set_temperature(model.Tgas)
         radmc.set_lineobs_inpfiles()
@@ -206,9 +198,9 @@ class ObsSimulator:
         if lam_mic is None and freq is not None:
             lam_mic = nc.c / freq * 1e4
 
-        incl = incl or self.incl
-        phi = phi or self.phi
-        posang = phi or self.posang
+        incl = incl if incl is not None else self.incl
+        phi = phi if phi is not None else self.phi
+        posang = posang if posang is not None else self.posang
 
         logger.info(f"Observing continum with wavelength of {lam_mic} micron")
         zoomau = np.concatenate([self.zoomau_x, self.zoomau_y])
@@ -220,7 +212,7 @@ class ObsSimulator:
             phi=phi,
             posang=posang,
             npixx=self.npixx,
-            npixy=self.npixx,
+            npixy=self.npixy,
             lam=lam_mic,
             zoomau=zoomau,
             option="noscat" + ("" if star else " nostar"),
@@ -239,57 +231,14 @@ class ObsSimulator:
 
         return odat
 
-    def observe_line_profile(
-        self, zoomau=None, iline=None, molname=None, incl=None, phi=None, posang=None
-    ):
-        """
-        Execute radmc3d to obtain line profile.
-
-        *** Not tested yet. ***
-
-        """
-        """
-        iline = iline or self.iline
-        molname = molname or self.molname
-        incl = incl or self.incl
-        phi = phi or self.phi
-        posang = posang or self.posang
-
-        cmd = gen_radmc_cmd(
-            mode="image",
-            dpc=self.dpc,
-            incl=incl,
-            phi=phi,
-            posang=posang,
-            npixx=self.npixx,
-            npixy=self.npixx,
-            lam=lam,
-            zoomau=zoomau,
-            option="noscat nostar",
-        )
-
-        tools.shell(cmd, cwd=self.radmc_dir, error_keyword="ERROR", log_prefix="    ")
-
-        self.data_line = rmci.readImage(fname=f"{self.radmc_dir}/image.out")
-        self.data_line.dpc = self.dpc
-        self.data_line.freq0 = nc.c / ( lam_mic/1e4 )
-        odat = read_radmcdata(self.data_line)
-
-        if self.conv:
-            odat.data = self.convolver(odat.data)
-            odat.set_obs_resolution(**self.convolve_config)
-
-        return odat
-        """
-
     def observe_line(
         self, iline=None, molname=None, incl=None, phi=None, posang=None, obsdust=False
     ):
-        iline = iline or self.iline
-        molname = molname or self.molname
-        incl = incl or self.incl
-        phi = phi or self.phi
-        posang = posang or self.posang
+        iline = iline if iline is not None else self.iline
+        molname = molname if molname is not None else self.molname
+        incl = incl if incl is not None else self.incl
+        phi = phi if phi is not None else self.phi
+        posang = posang if posang is not None else self.posang
 
         logger.info(f"Observing line with {molname}")
         self.nlam = int(round(self.vfw_kms / self.dv_kms))  # + 1
@@ -309,7 +258,7 @@ class ObsSimulator:
             "npixx": self.npixx,
             "npixy": self.npixy,
             "zoomau": [*self.zoomau_x, *self.zoomau_y],
-            "iline": self.iline,
+            "iline": iline,
             "option": "noscat nostar "
             + self.lineobs_option
             + " ",  # + (" doppcatch " if ,
@@ -360,7 +309,7 @@ class ObsSimulator:
             logger.info("Not use OpenMP.")
             cmd = gen_radmc_cmd(vhw_kms=self.vfw_kms / 2, nlam=self.nlam, **common_cmd)
             logger.info("***** RADMC-3D message start *****")
-            tools.shell(cmd, cwd=self.radmc_dir)
+            tools.shell(cmd, cwd=self.radmc_dir, error_keyword="ERROR")
             logger.info("***** RADMC-3D message end *****")
             self.data = rmci.readImage(fname=f"{self.radmc_dir}/image.out")
 
@@ -381,10 +330,6 @@ class ObsSimulator:
             odat.set_obs_resolution(**self.convolve_config)
 
         return odat
-
-    @staticmethod
-    def find_proper_nthread(n_thr, n_div):
-        return max([i for i in range(n_thr, 0, -1) if n_div % i == 0])
 
     @staticmethod
     def _divide_nlam_by_threads(nlam, nthr):
@@ -423,7 +368,7 @@ class ObsSimulator:
             error_keyword="ERROR",
             log_prefix="    ",
         )
-        with contextlib.redirect_stdout(open(os.devnull, "w")):
+        with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
             fname = f"{dpath_sub}/image.out"
             return rmci.readImage(fname=fname)
 
@@ -505,6 +450,13 @@ class Convolver:
         # relation : standard deviation = 1/(2 sqrt(ln(2))) * FWHM of Gaussian
         # theta_deg : cclw is positive
         self.mode = mode
+        if mode == "null":
+            return
+        if beam_maj_au is None or beam_min_au is None:
+            raise ValueError(
+                "beam size is required for convolution: "
+                "set beam_maj_au and beam_min_au, or use mode='null'"
+            )
         sigma_over_FWHM = 2 * np.sqrt(2 * np.log(2))
         conv_size = [beam_maj_au + 1e-100, beam_min_au + 1e-100]
         if vreso_kms is not None:
@@ -523,6 +475,9 @@ class Convolver:
             )
 
     def __call__(self, image):
+        if self.mode == "null":
+            return image
+
         if len(image.shape) == 2 or image.shape[2] == 1:
             Kernel = self.Kernel_xy2d
             logger.info("Convolving image with 2d-Kernael")
@@ -543,9 +498,6 @@ class Convolver:
             # return aconv.convolve_fft(image, Kernel, allow_huge=True, nan_treatment='interpolate', normalize_kernel=True, fftn=fft, ifftn=ifft)
         elif self.mode == "scipy":
             return signal.convolve(image, Kernel, mode="same", method="auto")
-
-        elif self.mode == "null":
-            return image
         else:
             raise Exception("Unknown convolve mode: ", self.mode)
 
@@ -566,11 +518,14 @@ class BaseObsData:
     def __str__(self):
         return tools.dataclass_str(self)
 
-    def _reset_positive_axes(self, img, axs):
-        for i, ax in enumerate(axs):
-            if (len(ax) >= 2) and (ax[1] < ax[0]):
-                axs[i] = ax[::-1]
-                img = np.flip(img, i)
+    def _reset_positive_axes(self):
+        for i, name in enumerate(self._axnames):
+            ax = getattr(self, name)
+            if ax is None or len(ax) < 2:
+                continue
+            if ax[1] < ax[0]:
+                setattr(self, name, ax[::-1])
+                self.set_I(np.flip(self.get_I(), axis=i))
 
     def _check_data_shape(self):
         lens = tuple([len(ax) for ax in self.get_axes()])
@@ -613,15 +568,6 @@ class BaseObsData:
 
     def copy(self):
         return copy.deepcopy(self)
-
-    def convolve_image(self):  ## !! need to be changed
-        conv = Convolver(
-            (self.dx, self.dy),
-            beam_maj_au=self.obreso.beam_maj_au,
-            beam_min_au=self.obreso.beam_min_au,
-            beam_pa_deg=self.obreso.beam_pa_deg,
-        )
-        self.data = conv(self.data)
 
     """
     Get and set I and axes
@@ -802,7 +748,7 @@ class BaseObsData:
             self.Iunit = u.K
         else:
             raise AttributeError(
-                "Failed to convert the data into brightness temperature: Iunit={self.Iunit} and freq0={self.repos.freq0}"
+                f"Failed to convert the data into brightness temperature: Iunit={self.Iunit} and freq0={self.refpos.freq0}"
             )
 
     def trim(self, xlim=None, ylim=None, vlim=None):
@@ -982,33 +928,10 @@ class BaseObsData:
         elif ax == "v":
             self.vkms -= d
 
-    #     """
-    #     def move_center(self, xyau=None, radecdeg=None, v0_kms=None):
-    #         if xyau is not None:
-    #             self.move_position(xyau[0], "x", "au")
-    #             self.move_position(xyau[1], "y", "au")
-    #             self.refpos.dec0 += xyau[1] * nc.au/nc.pc/self.dpc * 180 / np.pi
-    #             self.refpos.ra0 -= xyau[0] * nc.au/nc.pc/self.dpc/np.cos(self.refpos.dec0) * 180 / np.pi
-    #
-    #         ""
-    #         elif radecdeg is not None:
-    #             self.dec0 -= np.deg2rad( decdeg[0] )
-    #             self.rad0 -= np.deg2rad( decdeg[1] )
-    #             self.dec -= np.deg2rad( decdeg[0] )
-    #             self.rad -= np.deg2rad( decdeg[1] )
-    #             self.calc_radec_to_stdcoord()
-    #         ""
-    #
-    #         if v0_kms is not None:
-    #             self.move_position(v0_kms, "v", "kms")
-    #             #self.vkms -= v0_kms
-    #             # self.freq0 -= *** : freq is not changed here, for now
-    #     """
-
     def set_refpoint(self, ra0, dec0):
         "1. Change the reference point (ra0, dec0)"
         self.refpos.ra0 = ra0
-        self.refpos.dec = dec0
+        self.refpos.dec0 = dec0
 
     def move_center(self, xy_au=None, to_Imax=False, **kwargs):
         "2. Change the origin of the coordinate but not change the reference point"
@@ -1081,10 +1004,21 @@ class Obreso:
 
     def __post_init__(self, obsdata):
         self.set_dpc_from_obsdata(obsdata)
-        if None in (self.beam_maj_au, self.beam_min_au):
-            self.set_beamsize_au()
-        elif None in (self.beam_maj_deg, self.beam_min_deg):
+        au_pair_complete = (self.beam_maj_au is not None) and (self.beam_min_au is not None)
+        deg_pair_complete = (self.beam_maj_deg is not None) and (self.beam_min_deg is not None)
+        if au_pair_complete:
             self.set_beamsize_deg()
+        elif deg_pair_complete:
+            self.set_beamsize_au()
+        else:
+            raise ValueError(
+                "specify both (beam_maj_au, beam_min_au) or both "
+                "(beam_maj_deg, beam_min_deg); "
+                f"given: beam_maj_au={self.beam_maj_au}, "
+                f"beam_min_au={self.beam_min_au}, "
+                f"beam_maj_deg={self.beam_maj_deg}, "
+                f"beam_min_deg={self.beam_min_deg}"
+            )
 
     def set_beamsize_au(self):
         if self.dpc is None:
@@ -1106,7 +1040,7 @@ class Obreso:
         ):
             self.dpc = obsdata.dpc
         else:
-            print("Something wrong in obsdata")
+            logger.warning("Something wrong in obsdata: dpc could not be determined")
 
 
 @dataclasses.dataclass
@@ -1169,33 +1103,34 @@ class Cube(BaseObsData):
             self.refpos.freq0 = freq0
         # self._complement_coord()
         self._check_data_shape()
-        self._reset_positive_axes(self.Ippv, [self.xau, self.yau, self.vkms])
+        self._reset_positive_axes()
 
     def get_mom0_map(self, normalize="peak", method="sum", vlim=None):
         if self.Ippv.shape[2] == 1:
             _Ipp = self.Ippv[..., 0]
         else:
-            if (vlim is not None) and (len(vlim) == 2):
-                if vlim[0] < vlim[1]:
-                    cond = np.where(
-                        (vlim[0] < self.vkms) & (self.vkms < vlim[1]), True, False
+            _Ippv = self.Ippv
+            _vkms = self.vkms
+            if vlim is not None:
+                if len(vlim) != 2 or vlim[0] >= vlim[1]:
+                    raise ValueError(
+                        f"vlim must be a 2-element sequence with vlim[0] < vlim[1]; got {vlim}"
                     )
-                    _Ipp = self.Ippv[..., cond]
-                    # _vkms = self.vkms[cond]
-                else:
-                    raise Exception
+                cond = (vlim[0] < _vkms) & (_vkms < vlim[1])
+                _Ippv = _Ippv[..., cond]
+                _vkms = _vkms[cond]
 
             if method == "sum":
-                _Ipp = np.sum(self.Ippv, axis=-1) * (self.vkms[1] - self.vkms[0])
-
+                _Ipp = np.sum(_Ippv, axis=-1) * (_vkms[1] - _vkms[0])
             elif method == "integrate":
-                _Ipp = integrate.simpson(self.Ippv, x=self.vkms, axis=-1)
-
-        if normalize == "peak":
-            _Ipp /= np.max(_Ipp)
+                _Ipp = integrate.simpson(_Ippv, x=_vkms, axis=-1)
+            else:
+                raise ValueError(f"Unknown method: {method!r}")
 
         img = Image(_Ipp, xau=self.xau, yau=self.yau, dpc=self.dpc, Iunit=self.Iunit)
         img.copy_info_from_obsdata(self)
+        if normalize == "peak":
+            img.norm_I("max")
 
         return img
 
@@ -1244,20 +1179,12 @@ class Cube(BaseObsData):
         if norm is not None:
             pv.norm_I(norm)
         if save:
-            pv.save_fitsfile()
+            raise NotImplementedError(
+                "get_pv_map(save=True) is not yet implemented; "
+                "will be wired to save_fits in P2-D"
+            )
         # self.pv_list.append(pv)
         return pv
-
-
-#    def position_line(self, xau, PA_deg, poffset_au=0):
-#        PA_rad = (PA_deg + 90) * nc.deg2rad
-#        pos_x = xau * np.cos(PA_rad) - poffset_au * np.sin(PA_rad)
-#        pos_y = xau * np.sin(PA_rad) + poffset_au * np.sin(PA_rad)
-#        return np.stack([pos_x, pos_y], axis=-1)
-
-"""
-    New standalone function
-"""
 
 
 @dataclasses.dataclass
@@ -1279,21 +1206,17 @@ class Image(BaseObsData):
     _Iname = "data"
     _axnames = ["xau", "yau"]
 
-    def __post_init__(self, radec_deg, radecSIN_deg, freq0=None, vkms0=None):
+    def __post_init__(self, radec_deg, radecSIN_deg, freq0):
         if radec_deg:
             self.set_coord_from_radec(*radec_deg)
         elif radecSIN_deg:
             self.set_coord_from_radecSIN(*radecSIN_deg)
 
-        # if vkms0 is not None, get freq0 and put it into self.refpos
-        # if freq0 is not None, just put it into self.refpos
-        if vkms0:
-            self.refpos.freq0 = tools.vkms_to_freq(vkms0)
         if freq0:
             self.refpos.freq0 = freq0
 
         self._check_data_shape()
-        self._reset_positive_axes(self.data, [self.xau, self.yau])
+        self._reset_positive_axes()
 
     #    def offset_center_to_maximum(self):
     #        xc, yc = self.get_peak_position(interp=False)
@@ -1336,7 +1259,7 @@ class PVmap(BaseObsData):
         if freq0:
             self.refpos.freq0 = freq0
         self._check_data_shape()
-        self._reset_positive_axes(self.Ipv, [self.xau, self.vkms])
+        self._reset_positive_axes()
 
 
 #########################################################
@@ -1437,16 +1360,13 @@ def read_obsdata(path, mode=None):
         return joblib.load(path)
 
     elif (".fits" in path) or (mode == "fits"):
-        # logger.error("Still constructing...Sorry...")
-        # sys.exit(1)
-        print("do fits")
-        return None
+        raise NotImplementedError(
+            "FITS reading via read_obsdata is not implemented; "
+            "use read_cube_fits / read_image_fits / read_pv_fits instead"
+        )
 
     else:
-        logger.error("Still constructing...Sorry...")
-        sys.exit(1)
-        # raise Exception("Still constructing...Sorry")
-        return Cube(filepath=path)
+        raise ValueError(f"cannot infer file type: {path}")
 
 
 def read_radmcdata(data):
@@ -1770,18 +1690,10 @@ def dec_to_deg(deg, arcmin, arcsec):
 
 
 def minmaxargs(array, lim):
-    # print(array, lim)
-    imin, imax = np.take(np.argwhere((array > lim[0]) & (array < lim[-1])), (0, -1))
+    indices = np.argwhere((array >= lim[0]) & (array <= lim[-1]))
+    if len(indices) == 0:
+        raise ValueError(f"no points within {lim}")
+    imin, imax = np.take(indices, (0, -1))
     return imin, imax + 1
 
 
-if __name__ == "__main__":
-    obj = read_fits(
-        "/home/smori/my-envos/ShareMori/260G_spw1_C3H2_v.fits",
-        "cube",
-        dpc=140,
-        unit1="deg",
-        unit2="deg",
-        unit3="m/s",
-    )
-    print(obj)
