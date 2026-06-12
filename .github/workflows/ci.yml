@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - develop
+      - "task/**"
+  pull_request:
+    branches:
+      - develop
+  workflow_dispatch:
+  schedule:
+    # 毎週月曜 UTC 02:00(test-full ジョブのみ実行)
+    - cron: "0 2 * * 1"
+
+jobs:
+  # -----------------------------------------------------------------------
+  # lint: ruff で構文・未定義名チェック
+  # -----------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check envos/
+
+  # -----------------------------------------------------------------------
+  # test: Python 3.9 / 3.11 / 3.12 マトリクス
+  # テストディレクトリが未作成(P0-3 完了前)の場合、pytest は exit code 5
+  # を返すため "|| [ $? -eq 5 ]" でワークアラウンドする。
+  # P0-3 がマージされたらこのワークアラウンドを削除すること。
+  # -----------------------------------------------------------------------
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and dev dependencies
+        run: pip install -e .[dev]
+
+      - name: Install radmc3dPy (git)
+        id: install_radmc3dpy_git
+        run: |
+          pip install "git+https://github.com/dullemond/radmc3d-2.0.git#subdirectory=python/radmc3dPy"
+        continue-on-error: true
+
+      - name: Install radmc3dPy (clone fallback)
+        if: steps.install_radmc3dpy_git.outcome == 'failure'
+        run: |
+          git clone https://github.com/dullemond/radmc3d-2.0.git
+          pip install ./radmc3d-2.0/python/radmc3dPy
+
+      - name: Run tests
+        # exit code 5 = no tests collected (tests/ ディレクトリ未作成、P0-3 前)
+        # P0-3 がマージされたら "|| [ $? -eq 5 ]" を削除すること。
+        run: |
+          pytest -m "not slow and not radmc" || [ $? -eq 5 ]
+
+  # -----------------------------------------------------------------------
+  # test-full: radmc3d バイナリを gfortran でビルドして完全テスト
+  # 週次スケジュール(schedule)または手動実行(workflow_dispatch)のみ実行。
+  # push/PR では実行しない。
+  # -----------------------------------------------------------------------
+  test-full:
+    name: Full Test (with radmc3d)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install gfortran
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+
+      - name: Install package and dev dependencies
+        run: pip install -e .[dev]
+
+      - name: Install radmc3dPy (git)
+        id: install_radmc3dpy_git_full
+        run: |
+          pip install "git+https://github.com/dullemond/radmc3d-2.0.git#subdirectory=python/radmc3dPy"
+        continue-on-error: true
+
+      - name: Install radmc3dPy (clone fallback)
+        if: steps.install_radmc3dpy_git_full.outcome == 'failure'
+        run: |
+          git clone https://github.com/dullemond/radmc3d-2.0.git radmc3d-2.0
+          pip install ./radmc3d-2.0/python/radmc3dPy
+
+      - name: Build radmc3d binary
+        run: |
+          # radmc3d ソースを clone してビルドし、バイナリを PATH に追加
+          git clone https://github.com/dullemond/radmc3d-2.0.git radmc3d-src
+          cd radmc3d-src/src
+          make
+          echo "$GITHUB_WORKSPACE/radmc3d-src/src" >> $GITHUB_PATH
+
+      - name: Run full tests (radmc and slow)
+        run: |
+          pytest -m "radmc or slow"
