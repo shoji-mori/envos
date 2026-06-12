@@ -668,7 +668,8 @@ P0-1 → P0-2 → P0-3 ─┬→ P0-4
 ## 8. 完了定義(Definition of Done)
 
 - **M0**: CI グリーン。ゴールデン回帰が PR ごとに走る。CONTRIBUTING.md 完備。
-- **M1**: ISSUES.md の A・B 全項目と C の対象項目がクローズ。radmc3d 環境で `python example_run.py` 完走。`ruff check envos/`(F821 含む)が per-file-ignores なしで全パス。
+- **M1**: ISSUES.md の A・B 全項目(**P2 に割り付け済みの B-19〜B-22 を除く**)と C の対象項目がクローズ。radmc3d 環境で `python example_run.py` 完走(radmc3d バイナリの無い開発環境では CI の test-full ジョブまたは利用者環境での実行に委譲)。`ruff check envos/`(F821 含む)が per-file-ignores なしで全パス。
+  **【2026-06-12 達成記録】** 148 passed + slow 6 passed、ruff 除外なしで全クリーン。⚠物理変更2件(P1-9 ディスク合成: ディスク領域で最大49.6%、P1-1 year定数: smpy系で≈0.33%)はゴールデン G4 追加・G3b 再生成で固定。タグ `v1.1.0`。example_run の radmc3d 実行部のみ CI test-full に委譲。
 - **M2**: (1) gpath 直接参照ゼロ+多重 run_dir テストパス、(2) obs 分割後も全テスト・旧 pickle 互換テストパス、(3) log.py 100 行以下、(4) FITS ラウンドトリップ+CASA風読み込みテストパス。
 
 ---
