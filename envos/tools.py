@@ -5,11 +5,11 @@ import sys
 import shutil
 import numpy as np
 import pandas
+from pathlib import Path
 from dataclasses import asdict
 from scipy import interpolate, integrate
 
 from .log import logger
-from . import gpath
 from . import nconst as nc
 
 def read_pickle(filepath):
@@ -20,12 +20,14 @@ def read_pickle(filepath):
 
 
 # def savefile(basename="file", mode="pickle", dpc=None, filepath=None):
-def savefile(target, basename="file", mode="pickle", filepath=None):
+def savefile(target, basename="file", mode="pickle", dirpath=None, filepath=None):
     if filepath is None:
+        if dirpath is None:
+            raise ValueError("savefile requires either dirpath or filepath")
         # output_ext = {"joblib": "jb", "pickle": "pkl", "fits": "fits"}[mode]
         output_ext = {"joblib": "jb", "pickle": "pkl"}[mode]
         filename = basename + "." + output_ext
-        filepath = gpath.run_dir / filename
+        filepath = Path(dirpath) / filename
         if filepath.exists():
             logger.info(f"remove old fits file: {filepath}")
             os.remove(filepath)
@@ -56,10 +58,10 @@ def save_array(arrays, fname, mode="ascii", header="", fmt="%.15e"):
         np.savetxt(f, data, header=header, fmt=fmt)
 
 
-def clean_radmcdir():
+def clean_radmcdir(dirpath):
     import shutil
 
-    logger.info(f"Cleaning {gpath.radmc_dir}")
+    logger.info(f"Cleaning {dirpath}")
     """
     files = glob.glob(f"{self.radmc_dir}/*")
     if len(files) == 0:
@@ -68,7 +70,7 @@ def clean_radmcdir():
         for f in files:
             logger.info(" V   " + f)
     """
-    shutil.rmtree(gpath.radmc_dir)
+    shutil.rmtree(dirpath)
     # os.mkdir(self.radmc_dir)
 
 

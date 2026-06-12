@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 from . import tools, cubicsolver, tsc, column_density
 from .nconst import G, kB, amu, au, Msun
-from . import gpath
 from .log import logger
 
 
@@ -22,14 +21,18 @@ class ModelBase:
         self.vR = self.vr * np.sin(self.tt) + self.vt * np.cos(self.tt)
         self.vz = self.vr * np.cos(self.tt) - self.vt * np.sin(self.tt)
 
-    def save(self, basename="file", mode="pickle", filepath=None):
+    def save(self, basename="file", mode="pickle", dirpath=None, filepath=None):
         """
         Any Model object can be saved by using .save function.
         basename is the filename witout extension
         mode can be choosen in "pickle",
 
+        Either ``dirpath`` (directory) or ``filepath`` (full path) must be
+        given; there is no implicit run-directory fallback.
         """
-        tools.savefile(self, basename=basename, mode=mode, filepath=filepath)
+        tools.savefile(
+            self, basename=basename, mode=mode, dirpath=dirpath, filepath=filepath
+        )
 
     def save_arrays(self, varnames, filename):
         if isinstance(varnames, str):
@@ -56,17 +59,26 @@ class ModelBase:
                 varlist.append(v)
         tools.save_array(varlist, filename, header=" ".join(varhdr))
 
-    def save_pickle(self, filename, filepath=None):
+    def save_pickle(self, filename=None, dirpath=None, filepath=None):
         if filepath is None:
-            filepath = os.path.join(gpath.run_dir, filename)
-        dirpath = os.path.dirname(filepath)
-        os.makedirs(dirpath, exist_ok=True)
+            if dirpath is None:
+                raise ValueError(
+                    "save_pickle requires either dirpath (with filename) or filepath"
+                )
+            filepath = os.path.join(dirpath, filename)
+        outdir = os.path.dirname(filepath)
+        if outdir:
+            os.makedirs(outdir, exist_ok=True)
         pd.to_pickle(self, filepath)
         logger.info(f"Saved : {filepath}")
 
-    def read_pickle(self, filename=None, filepath=None):
+    def read_pickle(self, filename=None, dirpath=None, filepath=None):
         if (filename is not None) and (filepath is None):
-            filepath = os.path.join(gpath.run_dir, filename)
+            if dirpath is None:
+                raise ValueError(
+                    "read_pickle requires either dirpath (with filename) or filepath"
+                )
+            filepath = os.path.join(dirpath, filename)
         tools.setattr_from_pickle(self, filepath)
 
     def get_midplane_profile(self, vname, dtheta=0.03, ntheta=1000, vabs=False):
@@ -295,17 +307,21 @@ class SimpleBallisticInnerEnvelope(ModelBase):
 
 
 class TerebeyOuterEnvelope(ModelBase):
-    def __init__(self, grid, t, cs, Omega, cavangle=0):
+    def __init__(self, grid, t, cs, Omega, cavangle=0, storage_dir=None):
         self.rho = None
         self.vr = None
         self.vt = None
         self.vp = None
+        self.storage_dir = storage_dir
         self.read_grid(grid)
         self.calc_kinematic_structure(t, cs, Omega, cavangle)
         self.rin_lim = cs * Omega**2 * t**3
 
     def calc_kinematic_structure(self, t, cs, Omega, cavangle):
-        res = tsc.get_tsc(self.rc_ax, self.tc_ax, t, cs, Omega, mode="read")
+        res = tsc.get_tsc(
+            self.rc_ax, self.tc_ax, t, cs, Omega, mode="read",
+            storage_dir=self.storage_dir,
+        )
         cavmask = np.array(self.tt >= cavangle, dtype=float)
         self.rho = res["rho"][:, :, np.newaxis] * cavmask
         self.vr = res["vr"][:, :, np.newaxis]

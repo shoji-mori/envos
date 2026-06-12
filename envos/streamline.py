@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from scipy import interpolate, integrate
 from .log import logger
 from . import nconst as nc
-from . import gpath
 
 
 def calc_streamline(
@@ -74,7 +73,9 @@ def calc_streamline(
     slc.calc_streamlines(pos0_list)
 
     if save:
-        slc.save_data(filename=filename, dpath=dpath, label=label)
+        # calc_streamline supplies the default save directory (current dir)
+        # when the caller does not specify one.
+        slc.save_data(filename=filename, dpath=dpath or ".", label=label)
 
     return slc.streamlines
 
@@ -93,10 +94,10 @@ class Streamline:
         self.variables.append([name, value, unit])
 
     def save_data(self, filename="stream", dpath=None, label=None):
-        # B-23 fix: use gpath.run_dir lazily instead of global
+        # P2-A-2: dpath is required; callers (calc_streamline) supply a default.
         if dpath is None:
-            dpath = gpath.run_dir
-        Path(str(dpath)).mkdir(exist_ok=True)
+            raise ValueError("save_data requires dpath")
+        Path(str(dpath)).mkdir(parents=True, exist_ok=True)
 
         poslabel = f"r{self.pos0[0]/nc.au:.0f}_th{np.rad2deg(self.pos0[1]):.0f}"
 

@@ -8,7 +8,6 @@ import pandas as pd
 import radmc3dPy.analyze as rmca
 from . import tools
 from . import nconst as nc
-from . import gpath
 from .log import logger
 
 """
@@ -28,9 +27,9 @@ class RadmcController:
     ):
         if config is not None:
             self.config = config
-            run_dir = run_dir or config.run_dir
-            radmc_dir = radmc_dir or config.radmc_dir
-            storage_dir = storage_dir or config.storage_dir
+            run_dir = run_dir or config.run_path
+            radmc_dir = radmc_dir or config.radmc_path
+            storage_dir = storage_dir or config.storage_path
 
             self.n_thread = config.n_thread
             self.nphot = config.nphot
@@ -60,15 +59,20 @@ class RadmcController:
         self.set_dirs(run_dir, radmc_dir, storage_dir)
 
     def set_dirs(self, run_dir=None, radmc_dir=None, storage_dir=None):
-        self.run_dir = run_dir or gpath.run_dir  # global?
-        gpath.make_dirs(run=self.run_dir)
+        # P2-A-2: directories come from config or explicit arguments only;
+        # there is no global gpath fallback.
+        if run_dir is None or radmc_dir is None or storage_dir is None:
+            raise ValueError(
+                "RadmcController requires run_dir, radmc_dir and storage_dir "
+                "(pass a Config or the directories explicitly)"
+            )
+        self.run_dir = run_dir
+        os.makedirs(self.run_dir, exist_ok=True)
 
-        self.radmc_dir = radmc_dir or gpath.radmc_dir  # local
-        gpath.make_dirs(radmc=self.radmc_dir)
+        self.radmc_dir = radmc_dir
+        os.makedirs(self.radmc_dir, exist_ok=True)
 
-        self.storage_dir = storage_dir or gpath.storage_dir
-        if self.storage_dir is not gpath.storage_dir:
-            gpath.make_dirs(storage=self.storage_dir)
+        self.storage_dir = storage_dir
 
     def set_input_params(
         self,
@@ -506,10 +510,9 @@ class kappa:
     def kappa_sca_func(self):
         return np.full_like(self.lam_micron, 0.0)
 
-    def save(self):
-        # print(f"{radmc_dir}/dustkappa_kappa0{self.kappa0_micron:.0e}_beta{self.beta}.inp")
+    def save(self, dirpath):
         np.savetxt(
-            f"{gpath.radmc_dir}/dustkappa_kappa0{self.kappa0_micron:.0e}_beta{self.beta}.inp",
+            f"{dirpath}/dustkappa_kappa0{self.kappa0_micron:.0e}_beta{self.beta}.inp",
             self.table,
             header=f"2\n{self.N_lam}\n",
             comments="",
@@ -519,4 +522,4 @@ class kappa:
 if __name__ == "__main__":
     for k0 in [1e4, 1e3]:
         for b in [0, -1, -2]:
-            kappa(k0, b).save()
+            kappa(k0, b).save(".")

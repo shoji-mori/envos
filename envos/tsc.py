@@ -4,7 +4,6 @@ import pandas as pd
 from scipy import integrate, interpolate, optimize
 from dataclasses import dataclass
 
-from . import gpath
 from .log import logger
 from . import nconst as nc
 
@@ -54,9 +53,10 @@ class TscData:
 
 
 class TscSolver:
-    def __init__(self, tau=0.001, n=500, eps=1e-8, plot=False):
+    def __init__(self, tau=0.001, n=500, eps=1e-8, plot=False, fig_dir="."):
         self.tau = tau
         self.plot = plot
+        self.fig_dir = fig_dir
         self.eps = eps
         self.xout = 1.0 + np.geomspace(1 / self.tau - 1, eps, n)
         self.xin = 1 / (1.0 + np.geomspace(eps, self.tau ** (-2) - 1.0, n))
@@ -292,7 +292,7 @@ class TscSolver:
                 plt.xlim(-3, 1)
                 plt.ylim(-5, 7)
                 logger.info(f"{j}: K={K}")
-                plt.savefig(f"{gpath.fig_dir}/alpha_{j}.pdf")
+                plt.savefig(f"{self.fig_dir}/alpha_{j}.pdf")
                 logger.info("saved figure")
                 plt.clf()
             return soly[3][-1] - 0.2 * soly[0][-1] * solx[-1] ** 5
@@ -355,8 +355,11 @@ class TscSolver:
     def print_result_constants(self):
         logger.info(f"result: K={self.K}, ΔQ={self.Delta_Q}, m*={self.Ms}")
 
-    def save_table(self, filename=FILENAME, path=None):
-        path = path or os.path.join(gpath.storage_dir, filename)
+    def save_table(self, filename=FILENAME, storage_dir=None, path=None):
+        if path is None:
+            if storage_dir is None:
+                raise ValueError("save_table requires storage_dir or path")
+            path = os.path.join(storage_dir, filename)
         pd.to_pickle(self.get_solution(), path)
 
     def get_solution(self):
@@ -414,9 +417,9 @@ Wrapper
 """
 
 
-def get_tsc(r, theta, t, cs, Omega, mode="read", filename=FILENAME):
+def get_tsc(r, theta, t, cs, Omega, mode="read", filename=FILENAME, storage_dir=None):
     if mode == "read":
-        _sol = read_table(filename=filename)
+        _sol = read_table(filename=filename, storage_dir=storage_dir)
         if _sol is None:
             logger.info(
                 "Failed to load the table of TSC solution (probably just due to missing the file), and so solve TSC equations. After solving, the solution will be saved in the storage directory. From the next time, the table will be loaded to save computational costs."
@@ -426,7 +429,8 @@ def get_tsc(r, theta, t, cs, Omega, mode="read", filename=FILENAME):
     if mode == "solve":
         tscs = TscSolver()
         tscs.solve()
-        tscs.save_table(filename=filename)
+        if storage_dir is not None:
+            tscs.save_table(filename=filename, storage_dir=storage_dir)
         _sol = tscs.get_solution()
 
     x = r / cs / t
@@ -461,25 +465,30 @@ def get_tsc(r, theta, t, cs, Omega, mode="read", filename=FILENAME):
     return {"rho": rho, "vr": vr, "vt": vt, "vp": vp, "Delta": mgdata.Delta_Q}
 
 
-def save_table(filename=FILENAME, tau=0.01, search_K=False, **kwargs):
-    tscs = TscSolver(tau=tau, **kwargs)
+def save_table(filename=FILENAME, storage_dir=None, tau=0.01, search_K=False, **kwargs):
+    fig_dir = kwargs.pop("fig_dir", ".")
+    tscs = TscSolver(tau=tau, fig_dir=fig_dir, **kwargs)
     tscs.solve(search_K=search_K)
-    tscs.save_table(filename=filename)
+    tscs.save_table(filename=filename, storage_dir=storage_dir)
 
 
-def read_table(filename=FILENAME, path=None):
+def read_table(filename=FILENAME, storage_dir=None, path=None):
     try:
-        path = path or os.path.join(gpath.storage_dir, filename)
+        if path is None:
+            if storage_dir is None:
+                return None
+            path = os.path.join(storage_dir, filename)
         return pd.read_pickle(path)
     except Exception:
         return None
 
 
-if __name__ == "__main__":
-    from envos import tsc
-
-    tsc.save_table(n=300, tau=0.001, eps=1e-8, search_K=True, plot=True)
-    sol = tsc.read_table()
+def _main(storage_dir=".", fig_dir="."):
+    tsc.save_table(
+        storage_dir=storage_dir, n=300, tau=0.001, eps=1e-8, search_K=True, plot=True,
+        fig_dir=fig_dir,
+    )
+    sol = tsc.read_table(storage_dir=storage_dir)
 
     import matplotlib.pyplot as plt
 
@@ -491,14 +500,20 @@ if __name__ == "__main__":
         sol.x,
         np.array([sol.alpha_0, sol.alpha_M, sol.alpha_Q, -sol.alpha_Q]).T,
     )
-    plt.savefig(f"{gpath.fig_dir}/tscfig3.pdf")
+    plt.savefig(f"{fig_dir}/tscfig3.pdf")
     [_l.remove() for _l in l]
     plt.xlim(1e-3, 1e0)
     plt.ylim(1e-4, 1e3)
     l = plt.plot(sol.x, np.array([-sol.V_0, sol.V_M]).T)
-    plt.savefig(f"{gpath.fig_dir}/tscfig4a.pdf")
+    plt.savefig(f"{fig_dir}/tscfig4a.pdf")
     [_l.remove() for _l in l]
     plt.xlim(1e-3, 1e1)
     plt.ylim(1e-8, 1e3)
     l = plt.plot(sol.x, np.array([-sol.V_Q, sol.V_Q, -sol.W_Q]).T)
-    plt.savefig(f"{gpath.fig_dir}/tscfig4b.pdf")
+    plt.savefig(f"{fig_dir}/tscfig4b.pdf")
+
+
+if __name__ == "__main__":
+    from envos import tsc
+
+    _main()

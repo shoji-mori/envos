@@ -7,7 +7,6 @@ import matplotlib.colors as mc
 #from .plot_funcs import *
 from . import plot_funcs as pfun
 from .. import tools
-from .. import gpath
 
 """
 -- Plan for new structure
@@ -247,10 +246,7 @@ def plot_lineprofile(cube, xau_range=None, yau_range=None, unit=None, freq0=None
     plt.xlabel("Velocity [km/s]")
     plt.ylabel("Tb [K]")
 
-    filepath = os.path.join(gpath.fig_dir, "line.pdf")
-    print("saved ", filepath)
-    plt.savefig(filepath)
-    plt.clf()
+    pfun.savefig("line.pdf")
 
 
 # ------------------------------------------------------------------------------#
