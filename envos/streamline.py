@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from scipy import interpolate, integrate
 from .log import logger
 from . import nconst as nc
-# from .gpath import run_dir
+from . import gpath
 
 
 def calc_streamline(
@@ -14,9 +14,9 @@ def calc_streamline(
     pos0=None,
     r0_au=None,
     theta0_deg=None,
-    names=[],
-    units=[],
-    variables=[],
+    names=None,
+    units=None,
+    variables=None,
     t_eval=None,
     t0_yr=10,
     dt_yr=10,
@@ -27,6 +27,13 @@ def calc_streamline(
     dpath=None,
     label=None,
 ):
+    if names is None:
+        names = []
+    if units is None:
+        units = []
+    if variables is None:
+        variables = []
+
     if (r0_au is not None) and (theta0_deg is not None):
         if np.isscalar(r0_au) and np.isscalar(theta0_deg):
             pos0_list = [(r0_au, theta0_deg)]
@@ -52,7 +59,8 @@ def calc_streamline(
     if t_eval is None:
         t_eval = np.arange(t0_yr, 1e6, dt_yr) * nc.yr
 
-    _variables = variables
+    # Copy to avoid mutating the caller's list (B-24 fix)
+    _variables = list(variables)
     _variables += [(n, getattr(model, n), u) for n, u in zip(names, units)]
 
     slc = StreamlineCalculator2(
@@ -62,7 +70,7 @@ def calc_streamline(
         method=method,
         variables=_variables,
     )
-    print(pos0_list)
+    logger.debug(f"Starting positions: {pos0_list}")
     slc.calc_streamlines(pos0_list)
 
     if save:
@@ -85,9 +93,9 @@ class Streamline:
         self.variables.append([name, value, unit])
 
     def save_data(self, filename="stream", dpath=None, label=None):
-        global run_dir
+        # B-23 fix: use gpath.run_dir lazily instead of global
         if dpath is None:
-            dpath = run_dir
+            dpath = gpath.run_dir
         Path(str(dpath)).mkdir(exist_ok=True)
 
         poslabel = f"r{self.pos0[0]/nc.au:.0f}_th{np.rad2deg(self.pos0[1]):.0f}"
@@ -132,7 +140,6 @@ class StreamlineCalculator2:
         model,
         t_eval=np.geomspace(1, 1e30, 500),
         rtol=1e-8,
-        mirror=False,
         method="RK45",
         variables=[],
     ):
@@ -154,13 +161,12 @@ class StreamlineCalculator2:
         self.rtol = rtol
         self.method = method
         self.streamlines = []
-        self.mirror_symmetry = mirror
         self._hit_midplane.terminal = True
 
         self._var_list = []
-        if hasattr(model, "rhogas"):
+        if hasattr(model, "rhogas") and model.rhogas is not None:
             self.add_variable("rhogas", model.rhogas, "g cm^-3")
-        if hasattr(model, "Tgas"):
+        if hasattr(model, "Tgas") and model.Tgas is not None:
             self.add_variable("Tgas", model.Tgas, "K")
         self._var_list += variables
 
@@ -207,11 +213,6 @@ class StreamlineCalculator2:
         vt = self.vt_field(pos)[0]
         if np.isnan(pos[0]):
             raise Exception
-        # You may need this...
-        if self.mirror_symmetry and 0.5 * np.pi < pos[1]:
-            _pos = np.array([pos[0], -0.5 * np.pi + pos[1]])
-            vr = -self.vt_field(_pos)[0]
-            vt = -self.vt_field(_pos)[0]
         return np.array([vr, vt / pos[0]])
 
     @staticmethod
