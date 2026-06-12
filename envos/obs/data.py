@@ -165,7 +165,8 @@ class Cube(BaseObsData):
         return img
 
     def get_pv_map(
-        self, length=None, pangle_deg=0, poffset_au=0, norm=None, save=False
+        self, length=None, pangle_deg=0, poffset_au=0, norm=None, save=False,
+        savefile=None,
     ):
         # norm: None, "max", float
         if self.Ippv.shape[1] > 1:
@@ -209,10 +210,16 @@ class Cube(BaseObsData):
         if norm is not None:
             pv.norm_I(norm)
         if save:
-            raise NotImplementedError(
-                "get_pv_map(save=True) is not yet implemented; "
-                "will be wired to save_fits in P2-D"
-            )
+            # No implicit output path (PLAN §0): the caller must specify
+            # savefile explicitly; otherwise this stays unimplemented.
+            if savefile is None:
+                raise NotImplementedError(
+                    "get_pv_map(save=True) requires an explicit savefile path; "
+                    "implicit run-directory paths are not supported."
+                )
+            from .fits_io import save_fits
+
+            save_fits(pv, savefile)
         # self.pv_list.append(pv)
         return pv
 
