@@ -671,6 +671,7 @@ P0-1 → P0-2 → P0-3 ─┬→ P0-4
 - **M1**: ISSUES.md の A・B 全項目(**P2 に割り付け済みの B-19〜B-22 を除く**)と C の対象項目がクローズ。radmc3d 環境で `python example_run.py` 完走(radmc3d バイナリの無い開発環境では CI の test-full ジョブまたは利用者環境での実行に委譲)。`ruff check envos/`(F821 含む)が per-file-ignores なしで全パス。
   **【2026-06-12 達成記録】** 148 passed + slow 6 passed、ruff 除外なしで全クリーン。⚠物理変更2件(P1-9 ディスク合成: ディスク領域で最大49.6%、P1-1 year定数: smpy系で≈0.33%)はゴールデン G4 追加・G3b 再生成で固定。タグ `v1.1.0`。example_run の radmc3d 実行部のみ CI test-full に委譲。
 - **M2**: (1) gpath 直接参照ゼロ+多重 run_dir テストパス、(2) obs 分割後も全テスト・旧 pickle 互換テストパス、(3) log.py 100 行以下、(4) FITS ラウンドトリップ+CASA風読み込みテストパス。
+  **【2026-06-12 達成記録】** 4条件すべて充足: (1) gpath参照0件・test_paths 12件パス、(2) obs 5モジュール分割・レガシーpickle互換8テストパス、(3) log.py 80行、(4) ラウンドトリップ精度~1e-13・CASA風NAXIS=4読込パス。総計 **193 passed + slow 6**、ruff 全クリーン。バージョン 2.0.0、タグ `v2.0.0`(ローカル)。残課題: D2(チャネル幅、先送り)、ISSUES 追補-78/79(新規発見、未着手)、Deprecationシム(gpath / update_logfile)の v3 での削除。
 
 ---
 
