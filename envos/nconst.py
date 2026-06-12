@@ -20,13 +20,16 @@ bar = 1e6 # dyne cm-2
 eV = 1.60217662e-12  # erg
 J = 1e7  # erg
 Msun = 1.988435e33 # g
+# Lsun: historical value used throughout envos (3.848e33 erg/s).
+# IAU 2015 nominal value is 3.828e33 erg/s; this value differs from IAU.
+# Changing Lsun is a ⚠ physics-change; left as-is per PLAN.md D7.
 Lsun = 3.848e33 # erg/s
 Rsun = 6.957e10  # cm = 0.00465 au
 Tsun = 5772  # K
 Rj = 6.9911e9  # cm
 Mj = 1.89813e30  # g
-year = yr = 3.1454e7 # s
-Myr = 3.1454e13 # s
+year = yr = 3.15576e7  # s  Julian year (365.25 days); IAU standard
+Myr = 3.15576e13  # s
 Msun_per_yr = smpy = Msun / year # g/s
 Mj_p_Myr = Mj / (1e6 * year) # g/s
 # gamma    = 7.0/5.0
