@@ -40,6 +40,9 @@
 7. **`envos/obs.py:1153, 1268, 1316` — `Cube`/`Image`/`PVmap` の `refpos: RefPos = RefPos()` が共有ミュータブルデフォルト。**
    全インスタンスが同一の `RefPos` オブジェクトを共有するため、1つのキューブに `freq0` や `ra0` を
    設定すると他の全データに波及する。
+   **【2026-06-12 追記】Python 3.11 以降では dataclass が unhashable なデフォルト値を拒否するため、
+   これは `import envos` 自体を `ValueError` で失敗させる(実機確認済み)。事実上の最重要クラッシュ。
+   PLAN.md P0-2 に修正を繰り上げ。**
 
 8. **`envos/model_generator.py:182-190` — ディスク合成のロジックが不整合。**
    密度は `rho += self.disk.rho`(全域に加算)なのに、速度は `cond`(ディスクが卓越する領域)のみ置換。

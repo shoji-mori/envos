@@ -164,8 +164,9 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
   5. **インストール方式は editable(`pip install -e .`)を標準とする**(`storage/` の解決が package 親ディレクトリ依存のため。通常インストール対応は D9 / P2-A-1 で扱う)。
 - **受け入れ基準**: クリーンな venv で `pip install -e .[dev]` 成功。radmc3dPy を入れた上で `python -c "import envos"` 成功。
 
-### P0-2: SciPy 互換修正(A-10)
+### P0-2: 現代環境互換修正(A-10 + A-7 の繰り上げ)
 - **依存**: P0-1
+- **A-7 の繰り上げ(Python 3.11 対応)**: Python 3.11 以降、dataclass は unhashable なデフォルト値を `ValueError` で拒否するため、`refpos: RefPos = RefPos()`(`obs.py` 1153, 1268, 1316 行)は **`import envos` 自体を失敗させる**(実環境で確認済み。§11 検証パス6)。よって P1-11 項5 を本タスクに繰り上げ、3箇所を `dataclasses.field(default_factory=RefPos)` に変更する。この1修正のみで Python 3.11 + 最新依存での import が通ることは確認済み。
 - **修正**(機械的API改名。数値不変):
   | ファイル:行 | 旧 | 新 |
   |---|---|---|
@@ -378,7 +379,7 @@ P2 実施順は **A → C → B → D**。理由: A は B/C/D の前提となる
      elif method == "integrate": _Ipp = integrate.simpson(_Ippv, x=_vkms, axis=-1)
      ```
      `shape[2]==1` の特例は維持。正規化は `_Ipp /= max` の直接除算をやめ、`Image` 構築後に `if normalize == "peak": img.norm_I("max")` とする(`norm_I` が `Iunit` も更新するため追補-77 が同時に解消)。⚠ vlim 指定時のみ結果が変わる(従来は黙って無視=バグ修正として記録)。
-  5. `refpos: RefPos = RefPos()`(1153, 1268, 1316行)→ `dataclasses.field(default_factory=RefPos)`。
+  5. ~~`refpos: RefPos = RefPos()`(1153, 1268, 1316行)→ `dataclasses.field(default_factory=RefPos)`~~ **P0-2 に繰り上げ済み**(Python 3.11 で import 不能のため)。本タスクでは refpos 共有が解消されていることのテスト((b))のみ担当。
   6. `_reset_positive_axes`(569-573行)の再設計: シグネチャを `_reset_positive_axes(self)` に変更。`for i, name in enumerate(self._axnames):` で `ax = getattr(self, name)` を取り、`ax is not None and len(ax) >= 2 and ax[1] < ax[0]` なら `setattr(self, name, ax[::-1])` + `self.set_I(np.flip(self.get_I(), axis=i))`。呼び出し元3箇所(`Cube/Image/PVmap.__post_init__`)を引数なし呼び出しに更新。
   7. `set_refpoint`(1011行): `self.refpos.dec = dec0` → `self.refpos.dec0 = dec0`。
   8. `convto_Tb`(804-806行): エラーメッセージを f-string 化、`self.repos` → `self.refpos`。
@@ -738,6 +739,7 @@ P0-1 → P0-2 → P0-3 ─┬→ P0-4
 - **v1.0**: 初版。
 - **v1.1**: 検証パス1の結果を反映(§11 ログ参照)。主な変更: デッドコード一覧の確定(§2.5)と P1-12 の横断タスク化、`shell()` を Popen 単一実装への書き直しに変更(進捗表示の維持)、G3 を (a)/(b) に分割(year 修正の影響を捕捉可能に)、nonlte の早期失敗位置を `__init__` に変更、`read_radmcdata` の移動先を simulator.py に訂正、P2-B に pickle 互換性の保証とテストを追加、D9(storage 配置)を新設、P2-A-2 の表に呼び出し元更新(mori2023)を明記。
 - **v1.2**: 検証パス2の結果を反映(§11 ログ参照)。主な変更: C-59〜C-61 を P1-11 の修正項目(項12〜14)として追加、`header.py` 削除を P1-12 に追加(C-62 クローズ)、P1-4 を `update_logfile()` 方式に変更、P2-A-2 の表に gpath 参照3箇所(tsc 図出力・kappa.save・plot_lineprofile)を追加、P2-D に fitstype 別の軸解釈(PV には経度軸が無い)と `CTYPE1="OFFSET"` の決定を追記、付録Bの C 系・D 系マッピングを全面訂正。検証パス3で収束を確認。
+- **v2.2**: 実環境検証(検証パス6)の結果: A-7(refpos 共有デフォルト)は Python 3.11 以降 dataclass の制約により **import 時クラッシュ**となることが判明。P1-11 項5 を P0-2 に繰り上げ。P0-2 を「現代環境互換修正」に改題。
 - **v2.1**: ブランチ戦略を §0-2 に明文化(統合ブランチ `develop`、タスクブランチ命名規則 `task/<タスクID>-<説明>`、マイルストーンごとに `master` へ統合)。
 - **v2.0**: 検証パス4(深掘り)の結果を反映(§11 ログ参照)。主な変更: §0 に PR テンプレ・削除判断基準・ロールバック方針を追加、§2.5 に `calc_dependent_params` を追加し P1-6 を「削除+ガード」に再定義(B-26 は削除でクローズ)、§2.6(未使用だが残す公開API一覧)新設、§3.4(バージョニング)・§3.5(テストファイル台帳)新設、Phase 1 にリスク・規模一覧を追加、P1-2 に実機確認の受け入れ基準を追加、P1-5 にハンドラ close を追加、P1-9 に C-49 の据え置き注記(D10 新設)、P1-11 項4 を `norm_I` 経由に変更(追補-77 解消)・項14 の Obreso 仕様を厳密化、P2-A-1/A-3/C/D に実装スケッチと確定シグネチャを追加、付録Bの誤割り付け(C-44 → D2、C-49 → D10)を訂正、P0-1 のバージョン管理を §3.4 と整合化。検証パス5で収束を確認。
 
@@ -786,6 +788,12 @@ v1.2 全体を通読し、(1) タスク間の依存関係の整合(P1-5→P1-4�
 8. **[不整合] §3.4(新設)の dynamic version と P0-1 の「version="1.0.0" を一致させる」が衝突。** → P0-1 を dynamic 方式に統一。
 9. **[不足] リスクの高いタスク(P1-2, P1-11)の扱いが他と同列だった。** → リスク・規模一覧を §5 冒頭に新設し、P1-2 に実機確認を受け入れ基準として追加、P1-11 にコミット分割の指示を追加。
 10. **[不足] Phase 2 は方針記述のみで、実装者の裁量が大きすぎた。** → P2-A-1(Config プロパティ)、P2-A-3(gpath シム、PEP 562)、P2-C(`setup()`)、P2-D(公開シグネチャ)に実装スケッチを追加。
+
+### 検証パス6(v2.2、実環境での検証)
+開発着手時の環境構築(Python 3.11.15、numpy 2.4.6、scipy 1.17.1、astropy 等最新)で初めて実行レベルの検証が可能になり、以下が判明:
+1. **[重大な訂正] A-7(`refpos: RefPos = RefPos()`)は「インスタンス間の状態共有」ではなく、Python 3.11 以降では `ValueError: mutable default ... is not allowed` による import 時クラッシュ。** dataclass の mutable-default 検査が 3.11 で unhashable 型全般に拡大されたため。`import envos` が一切通らないことを実機で確認し、P1-11 項5 を P0-2 に繰り上げた。3箇所の `default_factory` 化のみで import が通ることも実機確認済み。
+2. **[確認] A-10(scipy.simps/cumtrapz)は予測どおり import 時ではなく実行時の障害**(関数参照が遅延のため)。P0-2 の位置づけは不変。
+3. **[制約] radmc3dPy は PyPI に存在せず**(PLAN の記載どおり)、サンドボックスでは公式 git からのインストールが権限ポリシーで不許可。テスト実行用に最小スタブ(import 時シンボルのみ、呼べば NotImplementedError)を venv に配置して対応。CI(P0-5)では実物をインストールする計画に変更なし。
 
 ### 検証パス5(v2.0 の収束確認)
 v2.0 全体を機械的に照合(grep による相互参照チェック+付録B全行の目視)した。発見と対応:
