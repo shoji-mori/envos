@@ -302,3 +302,29 @@
 クラッシュ系(`set_logfile("on")`、`set_radmcdir`、streamline保存、fits保存など)は気づきやすい一方、
 観測データ読み込み(`read_fits`)とexamplesは現状ほぼ動作しない状態。修正に着手する場合は
 A → B → C → D の順での対応を推奨。
+
+---
+
+## 追補(PLAN.md 作成時の再検証で発見。2026-06-12)
+
+71. **`envos/obs.py:1247` — `Cube.get_pv_map(save=True)` が存在しないメソッド `pv.save_fitsfile()` を呼ぶ**
+    → `AttributeError`(Bランク相当)。
+
+72. **`envos/config.py:227-228` — `level_stdout` / `level_logfile` はどこからも読まれていない。**
+    設定しても何も起きない(Cランク相当。`rot_ccw`(D-64)と同種の未配線パラメータ)。
+
+73. **`envos/log.py:109-120` — `set_logfile()` の `filename` 引数が本体で未使用**
+    (docstringには説明があるのに無視される。Dランク相当)。
+
+74. **呼び出し元ゼロのデッドコード(grep確認済み、Dランク相当)**:
+    `grid.get_interface_coord`(B-27のバグ箇所)、`grid.compressed_x2`、
+    `grid.Grid.calc_interface_coord` の `thax_ver==2/3` 分岐(`thax_ver=1` 固定で到達不能)、
+    `tsc.make_function_loglog`、`obs.find_proper_nthread`、`obs.BaseObsData.convolve_image`。
+
+75. **`envos/tools.py:290` — `shell()` 内のデバッグ残骸 `print("line:", _line)`**
+    (到達不能コード側だが、A-2 の修正時に併せて除去。Dランク相当)。
+
+76. **`envos/obs.py:1778-1787` — `__main__` ブロックに個人環境の絶対パスがハードコード**
+    (`/home/smori/...`。Dランク相当)。
+
+対応計画は `PLAN.md` を参照(タスクID対応は PLAN.md 付録B)。
