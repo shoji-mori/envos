@@ -53,6 +53,7 @@ I really welcome improvements and requests from users.
     - pandas
     - astropy
     - matplotlib (for using RADMC-3D)
+    - scikit-image
 
 - To use RADMC-3D
      - Fortran compiler (e.g. `gfortan`, `intel fortran`)
