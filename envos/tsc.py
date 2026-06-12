@@ -407,21 +407,6 @@ def make_function(x, y, extrapolate=False, fill_value=None):
     return f
 
 
-def make_function_loglog(x, y, extrapolate=False, fill_value=None):
-    fill_value = "extrapolate" if extrapolate else fill_value
-    logx = np.log(x)
-    logy = np.log(np.abs(y))
-    logf = interpolate.interp1d(logx, logy, fill_value=fill_value)
-    sgn = np.sign(y)
-    fsgn = interpolate.interp1d(logx, sgn, fill_value=fill_value)
-
-    def fnized(x):
-        logx = np.log(x)
-        sgn = np.sign(fsgn(logx))
-        return sgn * np.exp(logf(logx))
-
-    return fnized
-
 
 """
 Wrapper
