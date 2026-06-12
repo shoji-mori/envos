@@ -6,7 +6,7 @@ from dataclasses import dataclass, asdict, replace
 
 # from . import log
 from .log import logger, update_logfile
-from envos import gpath
+from envos.gpath import _register as _register_gpath
 from envos import log
 
 
@@ -333,20 +333,12 @@ class Config:
         return txt
 
     def __post_init__(self):
-        if self.storage_dir is not None:
-            gpath.storage_dir = Path(self.storage_dir)
-
-        if self.run_dir is not None:
-            gpath.set_rundir(Path(self.run_dir), update=True)
-
-        if self.fig_dir is not None:
-            gpath.fig_dir = Path(self.fig_dir)
-
-        if self.radmc_dir is not None:
-            gpath.radmc_dir = Path(self.radmc_dir)
+        # P2-A-3: Config is the single source of truth for paths. Register
+        # ourselves with the legacy-path compatibility shim (so deprecated
+        # global path access reflects this run) and configure logging.
+        _register_gpath(self)
 
         if self.logfile is not None:
-            gpath.logfile = Path(self.logfile)
             update_logfile()
 
         if self.level_stdout is not None:
