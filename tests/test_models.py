@@ -14,7 +14,6 @@ from pathlib import Path
 
 from envos.config import Config
 from envos.model_generator import ModelGenerator
-from envos import gpath
 
 
 # ---------------------------------------------------------------------------
@@ -45,32 +44,40 @@ def _make_model(config):
 
 
 # ---------------------------------------------------------------------------
-# P1-8 item 1: save_pickle uses gpath.run_dir at call time (A-9 fix)
+# P2-A-2: save_pickle writes to the directory given by the explicit argument
+# (the implicit run_dir fallback was removed; dirpath is now required).
 # ---------------------------------------------------------------------------
 
-def test_save_pickle_uses_current_run_dir(tmp_path):
+def test_save_pickle_uses_given_dirpath(tmp_path):
     """
-    After switching run_dir via a second Config, save_pickle should write to
-    the new run_dir, not the one that was current at import time.
+    save_pickle writes to the directory supplied via dirpath; building paths
+    from a second Config's run_path proves there is no shared global state.
     """
     config_a = _make_config(tmp_path, subdir="run_a")
     config_b = _make_config(tmp_path, subdir="run_b")
 
     model = _make_model(config_b)
     fname = "test_model.pkl"
-    model.save_pickle(fname)
+    model.save_pickle(fname, dirpath=config_b.run_path)
 
-    # File should exist under run_b (the most recently activated run_dir)
+    # File should exist under run_b (the directory we passed)
     expected = Path(config_b.run_dir) / fname
     assert expected.exists(), (
-        f"save_pickle should write to current gpath.run_dir ({config_b.run_dir}), "
+        f"save_pickle should write to the given dirpath ({config_b.run_dir}), "
         f"but file not found there; run_a would be {Path(config_a.run_dir) / fname}"
     )
     # Sanity: definitely NOT in run_a
     unexpected = Path(config_a.run_dir) / fname
     assert not unexpected.exists(), (
-        "save_pickle incorrectly wrote to stale run_a run_dir"
+        "save_pickle incorrectly wrote to run_a"
     )
+
+
+def test_save_pickle_requires_target():
+    """save_pickle without dirpath or filepath raises ValueError."""
+    from envos.models import CircumstellarModel
+    with pytest.raises(ValueError):
+        CircumstellarModel().save_pickle("m.pkl")
 
 
 # ---------------------------------------------------------------------------

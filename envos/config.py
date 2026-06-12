@@ -1,3 +1,4 @@
+import importlib.resources
 import numpy as np
 import textwrap
 from pathlib import Path
@@ -5,7 +6,7 @@ from dataclasses import dataclass, asdict, replace
 
 # from . import log
 from .log import logger, update_logfile
-from envos import gpath
+from envos.gpath import _register as _register_gpath
 from envos import log
 
 
@@ -332,20 +333,12 @@ class Config:
         return txt
 
     def __post_init__(self):
-        if self.storage_dir is not None:
-            gpath.storage_dir = Path(self.storage_dir)
-
-        if self.run_dir is not None:
-            gpath.set_rundir(Path(self.run_dir), update=True)
-
-        if self.fig_dir is not None:
-            gpath.fig_dir = Path(self.fig_dir)
-
-        if self.radmc_dir is not None:
-            gpath.radmc_dir = Path(self.radmc_dir)
+        # P2-A-3: Config is the single source of truth for paths. Register
+        # ourselves with the legacy-path compatibility shim (so deprecated
+        # global path access reflects this run) and configure logging.
+        _register_gpath(self)
 
         if self.logfile is not None:
-            gpath.logfile = Path(self.logfile)
             update_logfile()
 
         if self.level_stdout is not None:
@@ -359,3 +352,51 @@ class Config:
 
     def log(self):
         logger.info(self.__str__())
+
+    # ------------------------------------------------------------------
+    # P2-A-1: Config is the single source of truth for paths.
+    # These read-only properties resolve every path the package needs.
+    # The default rules mirror the legacy gpath behaviour:
+    #   run_dir   -> ./run
+    #   radmc_dir -> <run>/radmc
+    #   fig_dir   -> <run>/fig
+    #   logfile   -> <run>/log.dat
+    # No directory is created here; callers mkdir right before writing.
+    # ------------------------------------------------------------------
+    @property
+    def run_path(self) -> Path:
+        return Path(self.run_dir) if self.run_dir is not None else Path("./run")
+
+    @property
+    def radmc_path(self) -> Path:
+        if self.radmc_dir is not None:
+            return Path(self.radmc_dir)
+        return self.run_path / "radmc"
+
+    @property
+    def fig_path(self) -> Path:
+        if self.fig_dir is not None:
+            return Path(self.fig_dir)
+        return self.run_path / "fig"
+
+    @property
+    def log_path(self) -> Path:
+        if self.logfile is not None:
+            return Path(self.logfile)
+        return self.run_path / "log.dat"
+
+    @property
+    def storage_path(self) -> Path:
+        """Resolve the storage directory (opacity / molecular data, D9).
+
+        Resolution order:
+          1. explicit ``storage_dir``
+          2. legacy repository-root ``storage/`` (kept for one release)
+          3. packaged ``envos/storage`` via importlib.resources
+        """
+        if self.storage_dir is not None:
+            return Path(self.storage_dir)
+        legacy = Path(__file__).parents[1] / "storage"
+        if legacy.is_dir():
+            return legacy
+        return Path(importlib.resources.files("envos") / "storage")

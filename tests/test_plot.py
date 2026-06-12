@@ -15,7 +15,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 import envos
-import envos.gpath as gpath
 from envos.plot_tools import plot_funcs as pfun
 from envos.plot_tools import obs_output as pobs
 from envos.plot_tools import physical_structure as pphys
@@ -159,8 +158,8 @@ class TestPlotVelocityMidplaneProfile:
 
     def test_runs_midplane_slice(self, g1_model, tmp_path):
         """midplane_average=False should not raise (was: NameError/TypeError on get_argmid)."""
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             plt.figure()
             # midplane_average=False: test that the fixed save logic (P1-17 fix 4)
@@ -170,19 +169,19 @@ class TestPlotVelocityMidplaneProfile:
             pdfs = list(tmp_path.glob("*.pdf"))
             assert len(pdfs) >= 1, "Expected at least one PDF to be written"
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
     def test_runs_midplane_average(self, g1_model, tmp_path):
         """midplane_average=True (the default) should also complete without error."""
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             plt.figure()
             pphys.plot_velocity_midplane_profile(g1_model, midplane_average=True, save=True)
             pdfs = list(tmp_path.glob("*.pdf"))
             assert len(pdfs) >= 1
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
 
 class TestPlotLosvelocityMidplaneMap:
@@ -204,15 +203,15 @@ class TestPlotLosvelocityMidplaneMap:
         if model.Tgas is None:
             model.Tgas = np.full_like(model.rhogas, 10.0)
 
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             plt.figure()
             pphys.plot_losvelocity_midplane_map(model)
             pdfs = list(tmp_path.glob("*.pdf"))
             assert len(pdfs) >= 1
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
 
 class TestPlotAngularVelocityMidplaneProfile:
@@ -223,15 +222,15 @@ class TestPlotAngularVelocityMidplaneProfile:
 
     def test_runs_without_error(self, g1_model, tmp_path):
         """Removing trailing comma on Omega prevents tuple / UnboundLocalError."""
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             plt.figure()
             pphys.plot_angular_velocity_midplane_profile(g1_model, save=True)
             pdfs = list(tmp_path.glob("*.pdf"))
             assert len(pdfs) >= 1
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
 
 # ---------------------------------------------------------------------------
@@ -250,8 +249,8 @@ class TestPlotPvdiagram:
         With contour=True the peaks scatter call must be skipped (B-39 fix).
         Using a very-low-signal PV with distinct min/max so contour is valid.
         """
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             nx, nv = 20, 20
             xau = np.linspace(-100, 100, nx)
@@ -264,18 +263,18 @@ class TestPlotPvdiagram:
             # contour=True to exercise the peaks guard (B-39)
             pobs.plot_pvdiagram(pv, contour=True, out="test_pv.pdf")
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
     def test_gaussian_pv_with_peaks(self, tmp_path):
         """A Gaussian PV has a detectable peak; plot_pvdiagram should complete."""
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             xau, vkms, Ipv = _make_synthetic_gaussian_pv()
             pv = PVmap(Ipv=Ipv, xau=xau, vkms=vkms)
             pobs.plot_pvdiagram(pv, contour=True, out="test_pv_gaussian.pdf")
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
 
 class TestPlotImageWithRefimage:
@@ -289,8 +288,8 @@ class TestPlotImageWithRefimage:
         When contour=False, _contopt was undefined before the fix.
         Now _contopt is defined unconditionally, so refimage contour works.
         """
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             nx, ny = 20, 20
             xau = np.linspace(-100, 100, nx)
@@ -306,12 +305,12 @@ class TestPlotImageWithRefimage:
             pdfs = list(tmp_path.glob("*.pdf"))
             assert len(pdfs) >= 1
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)
 
     def test_no_refimage_contour_false(self, tmp_path):
         """No refimage with contour=False should also work (baseline sanity)."""
-        fig_dir_orig = gpath.fig_dir
-        gpath.make_dirs(fig=tmp_path)
+        fig_dir_orig = pfun.get_fig_dir()
+        pfun.set_fig_dir(tmp_path)
         try:
             nx, ny = 20, 20
             xau = np.linspace(-100, 100, nx)
@@ -320,4 +319,4 @@ class TestPlotImageWithRefimage:
             im = Image(data=data, xau=xau, yau=yau)
             pobs.plot_image(im, contour=False, save=True, out="test_image_noref.pdf")
         finally:
-            gpath.make_dirs(fig=fig_dir_orig)
+            pfun.set_fig_dir(fig_dir_orig)

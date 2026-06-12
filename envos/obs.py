@@ -8,6 +8,7 @@ import copy
 from logging import INFO
 import contextlib
 import multiprocessing
+from pathlib import Path
 from scipy import integrate, interpolate, signal, optimize
 import dataclasses
 
@@ -20,7 +21,6 @@ import radmc3dPy.analyze as rmca
 
 from . import nconst as nc
 from . import tools
-from . import gpath
 from .log import logger
 from .radmc3d import RadmcController
 
@@ -62,7 +62,9 @@ class ObsSimulator:
     """
 
     def __init__(self, config=None, radmcdir=None, dpc=None, n_thread=1):
-        self.radmc_dir = radmcdir or gpath.radmc_dir
+        # P2-A-2: radmc_dir comes from the explicit argument or the config
+        # (resolved in init_from_config); no global gpath fallback.
+        self.radmc_dir = radmcdir
         self.dpc = dpc
         self.n_thread = n_thread
         self.conv = False
@@ -75,6 +77,10 @@ class ObsSimulator:
 
     def init_from_config(self, config):
         self.config = config
+        if self.radmc_dir is None:
+            self.radmc_dir = config.radmc_path
+        from .plot_tools import plot_funcs as _pfun
+        _pfun.set_fig_dir(config.fig_path)
         self.dpc = config.dpc
         self.n_thread = config.n_thread
         self.incl = config.incl
@@ -961,17 +967,32 @@ class BaseObsData:
     """
 
     def save(
-        self, filename=None, basename="obsdata", mode="pickle", dpc=None, filepath=None
+        self,
+        filename=None,
+        basename="obsdata",
+        mode="pickle",
+        dpc=None,
+        dirpath=None,
+        filepath=None,
     ):
+        # P2-A-2: the output location must be given explicitly; the implicit
+        # run-directory fallback has been removed.
         if filepath is None:
+            if dirpath is None:
+                raise ValueError(
+                    "BaseObsData.save requires either filepath or dirpath"
+                )
             if filename is None:
                 output_ext = {"joblib": "jb", "pickle": "pkl", "fits": "fits"}[mode]
                 filename = basename + "." + output_ext
-            filepath = os.path.join(gpath.run_dir, filename)
-            if os.path.exists(filepath):
-                logger.info(f"remove old fits file: {filepath}")
-                os.remove(filepath)
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            filepath = os.path.join(dirpath, filename)
+
+        outdir = os.path.dirname(filepath)
+        if outdir:
+            os.makedirs(outdir, exist_ok=True)
+        if os.path.exists(filepath):
+            logger.info(f"remove old file: {filepath}")
+            os.remove(filepath)
 
         if mode == "joblib":
             import joblib
@@ -984,8 +1005,8 @@ class BaseObsData:
             logger.info(f"Saved pickle file: {filepath}")
 
         elif mode == "fits":
-            save_fits(self, filename)
-            logger.info(f"Saved fits file: {filename}")
+            save_fits(self, filepath)
+            logger.info(f"Saved fits file: {filepath}")
 
 
 @dataclasses.dataclass
@@ -1265,13 +1286,13 @@ class PVmap(BaseObsData):
 #########################################################
 # Save & Read Functions
 #########################################################
-def save_fits(od, filename):
+def save_fits(od, filepath):
     """
     save the obsdata as a fitsfile
     see IAU manual for variables used in fits:
          https://fits.gsfc.nasa.gov/standard40/fits_standard40aa-le.pdf
     """
-    filepath = gpath.run_dir / filename
+    filepath = Path(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)
     hdu = afits.PrimaryHDU(od.get_I().T)
     ## I may need to change ppv into vyx , ...Ivyx?
@@ -1345,7 +1366,7 @@ def save_fits(od, filename):
     )
     hdu.header.update(hd)
     hdulist = afits.HDUList([hdu])
-    hdulist.writeto(filename, overwrite=True)
+    hdulist.writeto(str(filepath), overwrite=True)
 
 
 # Readers to be deleted

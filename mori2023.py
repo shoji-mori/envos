@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import numpy as np
+from pathlib import Path
 from itertools import product
 from joblib import Parallel, delayed
 import envos
@@ -36,7 +37,7 @@ def do_mori2023(conf):
 
     refcube = _obs(conf, "fid")
     refcube = envos.read_obsdata(
-        envos.gpath.home_dir / "run_m23" / "run_fid/lobs_fid.pkl"
+        Path(__file__).parent / "run_m23" / "run_fid/lobs_fid.pkl"
     )
 
     _obs(conf.replaced(Ms_Msun=0.45, CR_au=74), "Aso17", refcube)
@@ -300,16 +301,16 @@ def synobs(
     """
     check if file exists and if so skip synobs
     """
-    savefile = envos.gpath.run_dir / filename
+    savefile = conf.run_path / filename
     if savefile.exists() and skip_if_exist:
         print(
-            f"Skip syonbs for {envos.gpath.run_dir/filename} because it already exists"
+            f"Skip syonbs for {conf.run_path/filename} because it already exists"
         )
         return
 
     if (not savefile.exists()) and skip_if_not_exist:
         print(
-            f"Skip syonbs for {envos.gpath.run_dir/filename} because it does not exist"
+            f"Skip syonbs for {conf.run_path/filename} because it does not exist"
         )
         return
 
@@ -327,10 +328,10 @@ def synobs(
     calc kinematic structure of model
     """
     if not calc_model:
-        print("Try to read ", envos.gpath.run_dir / "mg.pkl")
+        print("Try to read ", conf.run_path / "mg.pkl")
 
-    if (not calc_model) and (envos.gpath.run_dir / "mg.pkl").exists():
-        mg = envos.ModelGenerator(readfile=envos.gpath.run_dir / "mg.pkl")
+    if (not calc_model) and (conf.run_path / "mg.pkl").exists():
+        mg = envos.ModelGenerator(readfile=conf.run_path / "mg.pkl")
 
     elif calc_model:
         mg = envos.ModelGenerator(conf)
@@ -354,7 +355,7 @@ def synobs(
             mg.save()
     else:
         raise FileNotFoundError(
-            f"mg.pkl not found at {envos.gpath.run_dir / 'mg.pkl'} and calc_model=False"
+            f"mg.pkl not found at {conf.run_path / 'mg.pkl'} and calc_model=False"
         )
 
 
@@ -380,7 +381,7 @@ def synobs(
         model = mg.get_model()
         osim.set_model(model)
         cube = osim.observe_line(obsdust=obsdust)
-        cube.save(filename=filename)
+        cube.save(filepath=savefile)
     else:
         cube = envos.read_obsdata(savefile)
 
@@ -450,7 +451,7 @@ def synobs(
         )
 
 
-    envos.tools.clean_radmcdir()
+    envos.tools.clean_radmcdir(conf.radmc_path)
     return cube
 
 if __name__ == "__main__":

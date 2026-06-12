@@ -9,7 +9,6 @@ import matplotlib.colors as mc
 
 from skimage.feature import peak_local_max, corner_peaks
 
-from .. import gpath
 from .. import nconst as nc
 from .. import log
 from .. import streamline
@@ -869,9 +868,27 @@ def get_quadrant(x, y):
     return int((np.rad2deg(np.arctan2(y, x))) % 360 // 90 + 1)
 
 
+# P2-A-2: the plotting layer keeps a module-level default figure directory.
+# Adding a path argument to every plot function would break too much of the
+# public API, so figures resolve their output directory from this default,
+# which ModelGenerator/ObsSimulator set from Config.fig_path via
+# init_from_config(). Defaults to the current directory.
+_fig_dir = "."
+
+
+def set_fig_dir(path):
+    """Set the module-default directory used by savefig()."""
+    global _fig_dir
+    _fig_dir = str(path)
+
+
+def get_fig_dir():
+    return _fig_dir
+
+
 def savefig(filename):
-    gpath.make_dirs(fig=gpath.fig_dir)
-    filepath = os.path.join(gpath.fig_dir, filename)
+    os.makedirs(_fig_dir, exist_ok=True)
+    filepath = os.path.join(_fig_dir, filename)
     plt.savefig(
         filepath
     )  # if backend error occurs, please add matplotlib.use('Agg') somewhere

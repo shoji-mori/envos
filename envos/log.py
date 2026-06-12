@@ -51,13 +51,9 @@ def add_stream_hdlr(logger, level=None):
 def add_file_hdlr(logger, path, level=None, write_mode="w"):
     global file_level, StandardFormatter
     level = level if level is not None else file_level
-    # from . import gpath
-    # gpath.make_dirs(run=gpath.run_dir)
-    # os.makedirs(os.path.dirname(gpath.logfile), exist_ok=True)
 
     _logfile = pathlib.Path(str(path))
     _logfile.parent.mkdir(exist_ok=True, parents=True)
-    # gpath.logfile.parent.mkdir(exist_ok=True, parents=True)
 
     hdlr = logging.FileHandler(_logfile, write_mode, "utf-8")
     hdlr.setFormatter(StandardFormatter())
@@ -111,7 +107,9 @@ def set_logfile(name="envos", filename=None, filepath=None, level=None):
     level = level if level is not None else file_level
     from . import gpath
 
-    filepath = filepath if filepath is not None else gpath.logfile
+    # P2-C will require an explicit filepath; until then fall back to the
+    # legacy default via the shim's internal getter (no DeprecationWarning).
+    filepath = filepath if filepath is not None else gpath._get("logfile")
     add_file_hdlr(loggers[name], filepath, level)
 
 

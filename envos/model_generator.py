@@ -32,6 +32,8 @@ class ModelGenerator:
 
     def init_from_config(self, config):
         self.config = config
+        from .plot_tools import plot_funcs as _pfun
+        _pfun.set_fig_dir(config.fig_path)
 
         grid = Grid(
             config.ri_ax,
@@ -249,12 +251,17 @@ class ModelGenerator:
         if hasattr(outenv, "rho"):
             self.outenv = outenv
         elif outenv == "TSC":
+            storage_dir = (
+                self.config.storage_path if getattr(self, "config", None) is not None
+                else None
+            )
             self.outenv = TerebeyOuterEnvelope(
                 self.grid,
                 self.ppar.t,
                 self.ppar.cs,
                 self.ppar.Omega,
                 self.ppar.cavangle,
+                storage_dir=storage_dir,
             )
         else:
             raise Exception("Unknown outenv type")
@@ -304,8 +311,14 @@ class ModelGenerator:
     def get_model(self):
         return self.model
 
-    def save(self):
-        tools.savefile(self, basename="mg")
+    def save(self, dirpath=None):
+        if dirpath is None:
+            if getattr(self, "config", None) is None:
+                raise ValueError(
+                    "ModelGenerator.save requires dirpath when no config is set"
+                )
+            dirpath = self.config.run_path
+        tools.savefile(self, basename="mg", dirpath=dirpath)
 
 
 def read_model(path):

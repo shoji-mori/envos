@@ -22,6 +22,9 @@ extra = ["joblib", "psutil"]
 [tool.setuptools]
 packages = ["envos", "envos.plot_tools"]
 
+[tool.setuptools.package-data]
+envos = ["storage/*"]
+
 [tool.setuptools.dynamic]
 version = {attr = "envos.__version__"}
 
