@@ -309,7 +309,7 @@ class ObsSimulator:
             logger.info("Not use OpenMP.")
             cmd = gen_radmc_cmd(vhw_kms=self.vfw_kms / 2, nlam=self.nlam, **common_cmd)
             logger.info("***** RADMC-3D message start *****")
-            tools.shell(cmd, cwd=self.radmc_dir)
+            tools.shell(cmd, cwd=self.radmc_dir, error_keyword="ERROR")
             logger.info("***** RADMC-3D message end *****")
             self.data = rmci.readImage(fname=f"{self.radmc_dir}/image.out")
 
