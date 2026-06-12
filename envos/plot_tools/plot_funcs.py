@@ -141,14 +141,7 @@ def make_levels(x, dlv, log=False, minfrac=1e-8):
     minlv = np.floor(np.min(_x) / dlv) * dlv
     nlv = int(round((maxlv - minlv) / dlv))
     logger.debug(
-        "[make_levels] max is ",
-        np.max(_x),
-        " min is ",
-        np.min(_x),
-        ", dlv is ",
-        dlv,
-        ", so nlv is ",
-        nlv,
+        f"[make_levels] max is {np.max(_x)}, min is {np.min(_x)}, dlv is {dlv}, so nlv is {nlv}"
     )
     b = np.array([*range(nlv + 1)]) * dlv + minlv
     if len(b) > 1:
@@ -502,14 +495,14 @@ def add_peaks(
     LocalPeak_2D=False,
 ):
     if LocalPeak_Pax:
-        for Iv, v_ in zip(Ipv.transpose(0, 1), vkms):
+        for Iv, v_ in zip(Ipv.T, vkms):
             for xM in get_localpeak_positions(
                 xau, Iv, threshold_abs=np.max(Ipv) * 1e-10
             ):
                 plt.plot(xM, v_, c="red", markersize=1, marker="o")
 
     if LocalPeak_Vax:
-        for Ip, x_ in zip(Ipv.transpose(1, 0), xau):
+        for Ip, x_ in zip(Ipv, xau):
             for vM in get_localpeak_positions(
                 vkms, Ip, threshold_abs=np.max(Ipv) * 1e-10
             ):
@@ -543,6 +536,9 @@ def add_mass_estimate_plot(
     def calc_M(xau, vkms, fac=1):
         # calc xau*nc.au * (vkms*nc.kms)**2 / (nc.G*nc.Msun)
         return 0.001127 * xau * vkms**2 * fac
+
+    txt_Mip = ""
+    txt_Mvp = ""
 
     if quadrant is not None:
         xx, vv = np.meshgrid(xau, vkms, indexing="ij")
@@ -629,7 +625,7 @@ def add_mass_estimate_plot(
         txt = plt.text(
             0.95,
             0.05,
-            txt_Mip + "\n" + txt_Mvp,
+            "\n".join(filter(None, [txt_Mip, txt_Mvp])),
             transform=plt.gca().transAxes,
             ha="right",
             va="bottom",
@@ -737,13 +733,13 @@ def get_subgrid_peaks(xau, vkms, Ipv, num_peak_level=1, rtol=1e-4, quadr=None, *
             _quadr = get_quadrant(-x_vmax, -v_vmax)
         print(f"quadrant is {_quadr} (input:{quadr})")
         xx, vv = np.meshgrid(xau, vkms, indexing="ij")
-        if quadr == 1:
+        if _quadr == 1:
             _Ipv = np.where((xx >= 0) & (vv >= 0), Ipv, 0)
-        elif quadr == 2:
+        elif _quadr == 2:
             _Ipv = np.where((xx < 0) & (vv >= 0), Ipv, 0)
-        elif quadr == 3:
+        elif _quadr == 3:
             _Ipv = np.where((xx < 0) & (vv < 0), Ipv, 0)
-        elif quadr == 4:
+        elif _quadr == 4:
             _Ipv = np.where((xx >= 0) & (vv < 0), Ipv, 0)
     else:
         _Ipv = Ipv
@@ -753,14 +749,14 @@ def get_subgrid_peaks(xau, vkms, Ipv, num_peak_level=1, rtol=1e-4, quadr=None, *
         vkms_peak = vkms[coord_ini[1]]
         res = optimize.minimize(
             lambda x: 1. / interpfun(x[0], x[1])[0, 0],
-            coord_ini,
+            [xau_peak, vkms_peak],
             bounds=[(xau_peak - dx, xau_peak + dx),
                     (vkms_peak - dv, vkms_peak + dv)],
         )
         return res.x
 
     peak_subgrid_coords = np.array([find_subgrid_peak(coord) for coord in coords_peak])
-    peaks = [Peak(interpfun(*coord), *coord) for coord in peak_subgrid_coords]
+    peaks = [Peak(float(interpfun(*coord)[0, 0]), *coord) for coord in peak_subgrid_coords]
     peaks = sorted(peaks, key=lambda x: x.value)[::-1]
     result = []
     peak_list = [peaks[0]]
