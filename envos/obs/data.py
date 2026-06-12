@@ -290,7 +290,7 @@ class PVmap(BaseObsData):
     _Iname = "Ipv"
     _axnames = ["xau", "vkms"]
 
-    def __post_init__(self, xrad, freq0):
+    def __post_init__(self, freq0, xrad):
         if xrad is not None:
             self.xau = xrad * self.dpc * nc.pc / nc.au
         if freq0:
