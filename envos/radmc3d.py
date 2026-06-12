@@ -11,7 +11,7 @@ from . import nconst as nc
 from . import gpath
 from .log import logger
 
-""" 
+"""
     Classes
 
 """
@@ -48,6 +48,14 @@ class RadmcController:
             self.molabun = config.molabun
             self.iline = config.iline
             self.nonlte = config.nonlte
+
+            # D6: non-LTE mode is untested; raise early rather than produce
+            # silently wrong output (lines.inp species-count bug, see ISSUES C-57).
+            if self.nonlte:
+                raise NotImplementedError(
+                    "nonlte mode is untested (lines.inp species count bug); "
+                    "see ISSUES C-57"
+                )
 
         self.set_dirs(run_dir, radmc_dir, storage_dir)
 
@@ -95,12 +103,23 @@ class RadmcController:
         self.iline = iline
 
     def set_model(self, model):
-        if isinstance(model, str) and os.path.isfile(model):
-            self.model = pd.read_pickle(self.model_pkl)
-        if model is not None:
+        """
+        Attach a CircumstellarModel to this controller.
+
+        Parameters
+        ----------
+        model : CircumstellarModel or str
+            If a string, it must be the path to an existing pickle file.
+            If None, a ValueError is raised.
+        """
+        if isinstance(model, str):
+            if not os.path.isfile(model):
+                raise FileNotFoundError(model)
+            self.model = pd.read_pickle(model)
+        elif model is not None:
             self.model = model
         else:
-            raise Exception("Unknown model.")
+            raise ValueError("model is None")
 
     def set_mctherm_inpfiles(self):
         logger.info("Setting input files used in radmc3d")
@@ -113,12 +132,15 @@ class RadmcController:
         self._rhog = rhog
         if np.max(rhog) == 0:
             raise Exception("Zero density")
-        if hasattr(md, "rhodust"):
+        # B-15: hasattr always True for dataclass; check the value instead.
+        if getattr(md, "rhodust", None) is not None:
             rhod = md.rhodust
         else:
             rhod = rhog * self.f_dg
-            print("no rhodust")
-            exit()
+            logger.info(
+                "rhodust not set on model; computing as rhogas * f_dg (f_dg=%.4g)",
+                self.f_dg,
+            )
         lam = [
             *np.geomspace(0.1, 7, 20, endpoint=False),
             *np.geomspace(7, 25, 100, endpoint=False),
@@ -186,7 +208,7 @@ class RadmcController:
             # "optimized_motion":1,
             # "camera_spher_cavity_relres":0.01,
             # "camera_diagnostics_subpix": 1,
-            "lines_mode": 3 if self.nonlte else 1,
+            "lines_mode": 3 if getattr(self, "nonlte", False) else 1,
             "istar_sphere": 1,
         }
 
@@ -195,13 +217,15 @@ class RadmcController:
         )
 
         #    if self.temp_mode == "mctherm":
-        # remove gas_temperature.inp and dust_temperature.inp
-        remove_file("gas_temperature.inp")
-        remove_file("dust_temperature.dat")
+        # B-16: remove_file needs the full path, not just filename.
+        remove_file(os.path.join(self.radmc_dir, "gas_temperature.inp"))
+        remove_file(os.path.join(self.radmc_dir, "dust_temperature.dat"))
 
     def set_lineobs_inpfiles(
         self,
     ):
+        if self.molabun is None:
+            raise ValueError("molabun is not set")
         self.set_mctherm_inpfiles()
         vr, vt, vp = self.model.vr, self.model.vt, self.model.vp
         nh2 = self._rhog / (2 * nc.amu / self.mfrac_H2)
@@ -213,7 +237,10 @@ class RadmcController:
 
         # set_mol_lines
         self._copy_from_storage(f"molecule_{self.molname}.inp")
-        if self.nonlte:
+        # NOTE: the nonlte branch below is unreachable — RadmcController.__init__
+        # raises NotImplementedError when config.nonlte is truthy (D6).
+        # The code is kept as a scaffold for a future LTE-only implementation.
+        if getattr(self, "nonlte", False):  # pragma: no cover
             speclines = [f"{self.molname} leiden 0 0 2", "o-h2", "p-h2"]
             self.set_numberdens_collpartners(nh2)
         else:
@@ -318,6 +345,8 @@ class RadmcController:
         )
 
     def set_numberdens_collpartners(self, nh2, opratio=0.75):
+        # NOTE: unreachable in current code — nonlte raises NotImplementedError in
+        # __init__ (D6).  Kept as scaffold for future non-LTE implementation.
         self._save_input_file(
             "numberdens_o-h2.inp",
             "1",
@@ -382,33 +411,34 @@ class RadmcController:
             log_prefix="    ",
         )
 
+        # C-58: wrap chdir in try/finally so cwd is always restored even on error.
         cwd = os.getcwd()
-        os.chdir(self.radmc_dir)
-        # ddens=False, dtemp=False, gdens=False, gtemp=False, gvel=False,
-        # self.rmcdata = rmca.readData(ddens=True, dtemp=True, gdens=True, gtemp=True, gvel=True, ispec=self.molname)  # radmc3dData()
-        # self.rmcdata = rmca.readData(ddens=True, dtemp=True, gdens=True, gtemp=True, gvel=True, ispec=self.molname)  # radmc3dData()
-        self.rmcdata = rmca.readData(ispec=self.molname)  # radmc3dData()
-        """
-        radmcdata keys
-        {
-        'grid': <radmc3dPy.reggrid.radmc3dGrid object at 0x7f759c4f9460>,
-        'octree': False,
-        'rhodust': array([], dtype=float64),
-        'dusttemp': array([], dtype=float64),
-        'rhogas': array([], dtype=float64),
-        'ndens_mol': array([], dtype=float64),
-        'ndens_cp': array([], dtype=float64),
-        'gasvel': array([], dtype=float64),
-        'gastemp': array([], dtype=float64),
-        'vturb': array([], dtype=float64),
-        'taux': array([], dtype=float64),
-        'tauy': array([], dtype=float64),
-        'tauz': array([], dtype=float64),
-        'sigmadust': array([], dtype=float64),
-        'sigmagas': array([], dtype=float64)
-        }
-        """
-        os.chdir(cwd)
+        try:
+            os.chdir(self.radmc_dir)
+            # ddens=False, dtemp=False, gdens=False, gtemp=False, gvel=False,
+            self.rmcdata = rmca.readData(ispec=self.molname)  # radmc3dData()
+            """
+            radmcdata keys
+            {
+            'grid': <radmc3dPy.reggrid.radmc3dGrid object at 0x7f759c4f9460>,
+            'octree': False,
+            'rhodust': array([], dtype=float64),
+            'dusttemp': array([], dtype=float64),
+            'rhogas': array([], dtype=float64),
+            'ndens_mol': array([], dtype=float64),
+            'ndens_cp': array([], dtype=float64),
+            'gasvel': array([], dtype=float64),
+            'gastemp': array([], dtype=float64),
+            'vturb': array([], dtype=float64),
+            'taux': array([], dtype=float64),
+            'tauy': array([], dtype=float64),
+            'tauz': array([], dtype=float64),
+            'sigmadust': array([], dtype=float64),
+            'sigmagas': array([], dtype=float64)
+            }
+            """
+        finally:
+            os.chdir(cwd)
 
     def get_dust_density(self):
         return self.get_value("rhodust")

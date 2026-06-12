@@ -46,7 +46,9 @@ from tests.golden_helpers import (  # noqa: E402
     build_g1_model,
     build_g2_model,
     build_g3,
+    build_g4_model,
     extract_g1_arrays,
+    extract_g4_arrays,
 )
 
 import numpy as np
@@ -107,6 +109,24 @@ def generate_g3():
     return out_a, out_b
 
 
+def generate_g4(run_dir):
+    """
+    Generate G4 golden data (UCM + powerlaw disk, replace-mode synthesis -> .npz).
+
+    Physics-change (P1-9 D1): disk synthesis changed from additive
+    (rho += disk.rho) to replace-mode (rho[cond] = disk.rho[cond]).
+    The maximum relative difference vs the old additive method is ~50% in
+    disk-dominated cells and 0 in pure-envelope cells.
+    """
+    print("Generating G4 (UCM + powerlaw disk, replace-mode synthesis)...")
+    model = build_g4_model(run_dir)
+    arrays = extract_g4_arrays(model)
+    out_path = GOLDEN_DIR / "g4_ucm_disk.npz"
+    np.savez(out_path, **arrays)
+    print(f"  Saved {out_path}  ({out_path.stat().st_size} bytes)")
+    return out_path
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate envos golden test data")
     parser.add_argument(
@@ -121,6 +141,7 @@ def main():
     with tempfile.TemporaryDirectory() as run_dir:
         generate_g1(run_dir)
         generate_g3()
+        generate_g4(run_dir)
 
         if args.skip_g2:
             print("Skipping G2 (--skip-g2 flag set)")
@@ -129,7 +150,7 @@ def main():
                 generate_g2(run_dir, GOLDEN_DIR)
             except Exception as exc:
                 print(f"\n*** G2 FAILED: {type(exc).__name__}: {exc} ***")
-                print("G1 and G3 were generated successfully.")
+                print("G1, G3, and G4 were generated successfully.")
                 print("G2 is BLOCKED — see completion report.")
                 sys.exit(1)
 
