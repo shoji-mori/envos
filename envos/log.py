@@ -69,22 +69,17 @@ def add_file_hdlr(logger, path, level=None, write_mode="w"):
 
 
 def change_rundir(new_rundir):
-    global loggers, enable_saving, file_level
-    for logger in loggers.values():
-        for i, hdlr in enumerate(logger.handlers):
+    global loggers
+    new_rundir = pathlib.Path(new_rundir)
+    for lg in loggers.values():
+        for hdlr in list(lg.handlers):
             if type(hdlr) == logging.FileHandler:
-                fn = hdlr.baseFilename
-                old_rundir = pathlib.Path(fn).parents[0]
-                fn.replace(str(old_rundir), str(new_rundir))
-                logger.handlers[i].__init__(fn)
-
-        # if enable_saving:
-        #    _add_file_handler(logger, file_level)
-
-
-#    for logger in loggers.values():
-#        for hdlr in logger.handlers:
-#            print(logger.name, hdlr)
+                old_level = hdlr.level
+                old_name = pathlib.Path(hdlr.baseFilename).name
+                new_path = new_rundir / old_name
+                hdlr.close()
+                lg.removeHandler(hdlr)
+                add_file_hdlr(lg, new_path, level=old_level, write_mode="a")
 
 
 ##
@@ -124,13 +119,14 @@ def unset_logfile(name):
     """
     Note that this function destroys all file handlers included in the logger.
     """
-    for hdlr in loggers[name].handlers:
+    for hdlr in list(loggers[name].handlers):
         if type(hdlr) == logging.FileHandler:
-            logger.removeHandler(hdlr)
+            hdlr.close()
+            loggers[name].removeHandler(hdlr)
 
 
 ## Controll Level of Handlers
-def set_level(name, level_name, target="all", ver=2):
+def set_level(name, level_name, target="all"):
     global loggers, stream_level, file_level
 
     level = get_level(level_name)
@@ -144,12 +140,7 @@ def set_level(name, level_name, target="all", ver=2):
         if (type(hdlr) == htype) or (target == "all"):
             if debug_logger:
                 print(f"Now setting level to be {level_name}:{level} for {type(hdlr)}")
-            if ver == 2:
-                hdlr.setLevel(level)
-            elif ver == 1:
-                logger.removeHandler(hdlr)
-                hdlr.setLevel(level)
-                logger.addHandler(hdlr)
+            hdlr.setLevel(level)
 
     if debug_logger:
         show_loggers()
@@ -183,7 +174,7 @@ class color:
 
 class StandardFormatter(logging.Formatter):
     def __init__(self):
-        super().__init__(fmt="[%(filename)s] %(levelname)s: %(message)s is this used? ")
+        super().__init__(fmt="[%(filename)s] %(levelname)s: %(message)s")
 
         self._fmtdict = {
             logging.DEBUG: "(Debug) %(message)s",
